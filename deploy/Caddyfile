@@ -4,7 +4,13 @@
 # plataforma: nem o backend do Core, nem o de nenhum módulo, expõem porta
 # ao host — só este proxy.
 :443 {
-	tls internal
+	# "on_demand": obrigatório aqui porque o site é um catch-all (só porta,
+	# sem hostname) — sem isso o Caddy não sabe pra qual nome/IP gerar
+	# certificado de antemão, e o handshake TLS falha com "internal error"
+	# em qualquer conexão (confirmado em produção na DESKTOP-N6KR7DO).
+	tls internal {
+		on_demand
+	}
 
 	# Tudo sob /api vai pro backend do Core (prefixo removido antes de
 	# chegar lá — nenhuma rota do FastAPI usa "/api", incluindo as de
