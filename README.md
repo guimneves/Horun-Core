@@ -35,6 +35,24 @@ npm run dev
 
 Acesse `http://localhost:5174` e entre com o usuário/senha de bootstrap. A conta criada assim é o **administrador máximo** (seção 6 do `Prompt_Horun_Core.md`) — só ela cadastra módulos, usuários e concede permissões.
 
+## Deploy em produção (Docker)
+
+No PC dedicado (ver `../Horun Fase 2/Prompt_Fase2.md`, seção 2.1 para qualificar a máquina):
+
+```powershell
+# uma vez só, antes do primeiro deploy de qualquer projeto Horun nesta máquina
+docker network create horun-network
+
+git clone https://github.com/guimneves/Horun-Core.git
+cd Horun-Core
+copy .env.example .env
+notepad .env   # preencher POSTGRES_PASSWORD, CORE_SECRET_KEY, credenciais do admin
+
+docker compose up -d --build
+```
+
+Acesse `https://<IP-da-máquina>` no navegador (vai pedir pra aceitar o certificado self-signed — ver `Prompt_Fase2.md`, seção 4) e entre com o usuário/senha de bootstrap definidos no `.env`.
+
 ## Testes
 
 ```powershell
