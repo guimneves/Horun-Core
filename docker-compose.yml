@@ -1,0 +1,74 @@
+# Antes do primeiro "docker compose up" neste projeto, criar a rede
+# externa compartilhada com os módulos (uma vez só, não faz parte deste
+# compose porque sobrevive a subir/derrubar qualquer projeto individual):
+#
+#   docker network create horun-network
+#
+# É nela que o backend do Core alcança o backend de cada módulo (ex.
+# "re7s-backend") pelo nome do container, mesmo cada um vivendo no seu
+# próprio docker-compose.yml/repositório — ver Prompt_Horun_Core.md,
+# seção 1. Nenhum módulo foi conectado a essa rede ainda (RE7S continua
+# fora dela por enquanto — ver seção 8, item 5).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: horun_core
+      POSTGRES_USER: horun_core
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # Volume nomeado: sobrevive a `docker compose down`/rebuild do
+      # container. Só some com `docker compose down -v`, explícito.
+      - horun_core_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U horun_core -d horun_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Sem "ports:" — só acessível pelos outros containers desta rede,
+    # nunca pela rede do laboratório.
+
+  backend:
+    container_name: horun-core-backend
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CORE_DATABASE_URL: postgresql+psycopg://horun_core:${POSTGRES_PASSWORD}@db:5432/horun_core
+      CORE_SECRET_KEY: ${CORE_SECRET_KEY}
+      CORE_BOOTSTRAP_ADMIN_USERNAME: ${CORE_BOOTSTRAP_ADMIN_USERNAME}
+      CORE_BOOTSTRAP_ADMIN_PASSWORD: ${CORE_BOOTSTRAP_ADMIN_PASSWORD}
+    networks:
+      - default
+      - horun-network
+    # Sem "ports:" — só alcançável via o proxy (Caddy) e via a rede
+    # horun-network (pra falar com módulos), nunca direto do host.
+
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+networks:
+  # Criada manualmente uma vez (ver nota no topo do arquivo) — compartilhada
+  # entre o Core e os módulos, para o proxy de identidade alcançar cada um.
+  horun-network:
+    external: true
+
+volumes:
+  horun_core_pgdata:
+  caddy_data:
+  caddy_config:

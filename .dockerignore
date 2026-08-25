@@ -1,0 +1,15 @@
+# Contexto de build do deploy/Dockerfile é a raiz deste repositório — só
+# backend/frontend/design-system e deploy/ importam pra ele; o resto
+# (module-template, docs, backend do Core em si) não precisa ser enviado.
+backend/
+module-template/
+*.md
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.vite/
+.git/
+.pytest_cache/
+*.db

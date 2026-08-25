@@ -1,0 +1,29 @@
+[project]
+name = "horun-core"
+version = "0.1.0"
+description = "Horun Core — login unico, cadastro de modulos, permissoes e gateway da plataforma Horun"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlmodel>=0.0.22",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt<4.1",
+    "pydantic>=2.9",
+    "itsdangerous>=2.2",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+# Fase 2: driver do PostgreSQL — só necessário na imagem Docker do
+# servidor, não no desenvolvimento local (SQLite embutido no Python).
+postgres = [
+    "psycopg[binary]>=3.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

@@ -1,0 +1,26 @@
+# Mesmo padrão do RE7S (Rock Eval Horun Dev/deploy/Caddyfile) — TLS
+# self-signed automático via "tls internal" (decisão registrada em
+# Prompt_Fase2.md, seção 4). Este é o ÚNICO ponto de entrada público da
+# plataforma: nem o backend do Core, nem o de nenhum módulo, expõem porta
+# ao host — só este proxy.
+:443 {
+	tls internal
+
+	# Tudo sob /api vai pro backend do Core (prefixo removido antes de
+	# chegar lá — nenhuma rota do FastAPI usa "/api", incluindo as de
+	# proxy pra dentro de um módulo, /m/{id}/...; ver app/api/routes_proxy.py).
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Tudo mais é o frontend do Core (React/Vite) já buildado como estáticos.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+:80 {
+	redir https://{host}{uri} permanent
+}

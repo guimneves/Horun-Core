@@ -1,0 +1,13 @@
+# Compose para desenvolvimento/teste standalone deste módulo (sem o Horun
+# Core). Quando o módulo for "plugado" na plataforma de verdade, este
+# serviço de backend entra no docker-compose.yml do servidor, na mesma
+# rede do Core e sem porta exposta ao host — ver Prompt_Horun_Core.md,
+# seção 3, e Horun Fase 2/Prompt_Fase2.md para o padrão já usado pelo RE7S.
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      HORUN_DEV_MODE: "true"
+    ports:
+      - "8000:8000"
