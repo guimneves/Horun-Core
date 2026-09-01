@@ -2,6 +2,8 @@
 
 Login único, cadastro de módulos, permissões e gateway da plataforma **Horun** — ver [`Prompt_Horun_Core.md`](Prompt_Horun_Core.md) para a arquitetura completa e [`Prompt_Fase2.md`](Prompt_Fase2.md) para a infraestrutura do PC dedicado (Docker, TLS, checklist de qualificação de máquina).
 
+Novo na equipe? Comece por [`Guia_para_Colaboradores.md`](Guia_para_Colaboradores.md).
+
 ## Estrutura
 
 ```
