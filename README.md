@@ -1,6 +1,6 @@
 # Horun Core
 
-Login único, cadastro de módulos, permissões e gateway da plataforma **Horun** — ver [`Prompt_Horun_Core.md`](Prompt_Horun_Core.md) para a arquitetura completa.
+Login único, cadastro de módulos, permissões e gateway da plataforma **Horun** — ver [`Prompt_Horun_Core.md`](Prompt_Horun_Core.md) para a arquitetura completa e [`Prompt_Fase2.md`](Prompt_Fase2.md) para a infraestrutura do PC dedicado (Docker, TLS, checklist de qualificação de máquina).
 
 ## Estrutura
 
@@ -11,6 +11,7 @@ design-system/    Identidade visual compartilhada com todos os módulos
 module-template/  Esqueleto padrão para criar um módulo novo
 create_horun_module.py   Script gerador (usa module-template/)
 Prompt_Horun_Modulo.md   Contrato de módulo, autocontido, para colar em outro chatbot
+Prompt_Fase2.md          Infraestrutura do PC dedicado (Docker, TLS, checklist de qualificação)
 ```
 
 ## Rodando localmente (desenvolvimento)
@@ -37,7 +38,7 @@ Acesse `http://localhost:5174` e entre com o usuário/senha de bootstrap. A cont
 
 ## Deploy em produção (Docker)
 
-No PC dedicado (ver `../Horun Fase 2/Prompt_Fase2.md`, seção 2.1 para qualificar a máquina):
+No PC dedicado (ver [`Prompt_Fase2.md`](Prompt_Fase2.md), seção 2.1 para qualificar a máquina):
 
 ```powershell
 # uma vez só, antes do primeiro deploy de qualquer projeto Horun nesta máquina
