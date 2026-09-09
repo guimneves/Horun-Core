@@ -7,7 +7,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
-from app.api import routes_auth, routes_modules, routes_proxy
+from app.api import (
+    routes_auth,
+    routes_equipment,
+    routes_modules,
+    routes_posts,
+    routes_proxy,
+    routes_reservations,
+)
 from app.core.security import hash_password
 from app.db.models import User
 from app.db.session import create_db_and_tables, engine
@@ -35,6 +42,9 @@ app.add_middleware(
 
 app.include_router(routes_auth.router)
 app.include_router(routes_modules.router)
+app.include_router(routes_posts.router)
+app.include_router(routes_equipment.router)
+app.include_router(routes_reservations.router)
 app.include_router(routes_proxy.router)
 
 

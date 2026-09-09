@@ -16,7 +16,7 @@ function StatusBadge({ status }: { status: ModuleStatus['status'] }) {
   )
 }
 
-export function DashboardPage() {
+export function ModulesPage() {
   const [modules, setModules] = useState<ModuleStatus[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 

@@ -60,3 +60,41 @@ class UserModuleAccess(SQLModel, table=True):
     module_id: str = Field(foreign_key="module.id", index=True)
     granted_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
     granted_at: datetime = Field(default_factory=utcnow)
+
+
+class Post(SQLModel, table=True):
+    """Mural/feed de avisos e lembretes entre colaboradores (seção "Mural"
+    do dashboard). Qualquer usuário autenticado pode publicar; só o
+    administrador máximo pode fixar (`pinned`) — mesmo raciocínio de
+    permissão dos outros recursos administrativos."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    author_id: int = Field(foreign_key="user.id", index=True)
+    content: str
+    pinned: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Equipment(SQLModel, table=True):
+    """Equipamento reservável na Agenda — conceito separado de `Module`:
+    nem todo equipamento tem módulo de software (ex. balança analítica), e
+    o inverso também vale (o Horun Core em si não é um equipamento)."""
+
+    id: str = Field(primary_key=True)  # slug, ex. "re7s", "leco832"
+    display_name: str
+    color: str = "#15216f"  # usada na legenda/blocos da Agenda
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Reservation(SQLModel, table=True):
+    """Reserva de uso de um equipamento por um usuário, num intervalo de
+    tempo. Duas reservas do mesmo equipamento não podem se sobrepor — ver
+    validação em app/api/routes_reservations.py."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    equipment_id: str = Field(foreign_key="equipment.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    title: str = ""
+    start_at: datetime
+    end_at: datetime
+    created_at: datetime = Field(default_factory=utcnow)

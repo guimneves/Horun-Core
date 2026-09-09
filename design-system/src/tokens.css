@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* @horun/design-system é referenciado via "file:" (fica dentro de
+   node_modules do app que o consome) — o Tailwind v4 não escaneia
+   node_modules por padrão na detecção automática de classes, então as
+   classes usadas nos componentes deste pacote (ThemeToggle.tsx,
+   HorunFooter.tsx) nunca eram geradas no CSS final sem isto. */
+@source "./*.tsx";
+
 /*
  * Paleta compartilhada do Horun — azul/branco ancorado no azul-marinho do
  * logo do NQTR (#15216F). Três modos: claro / semi-escuro (dim) / escuro.

@@ -68,6 +68,32 @@ export interface ModuleAccessEntry {
   username: string
 }
 
+export interface Post {
+  id: number
+  content: string
+  pinned: boolean
+  created_at: string
+  author_id: number
+  author_username: string
+  author_display_name: string
+}
+
+export interface Equipment {
+  id: string
+  display_name: string
+  color: string
+}
+
+export interface Reservation {
+  id: number
+  equipment_id: string
+  title: string
+  start_at: string
+  end_at: string
+  user_id: number
+  user_display_name: string
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
@@ -91,4 +117,23 @@ export const api = {
     request<{ ok: boolean }>(`/modules/${moduleId}/access`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   revokeModuleAccess: (moduleId: string, userId: number) =>
     request<{ ok: boolean }>(`/modules/${moduleId}/access/${userId}`, { method: 'DELETE' }),
+
+  listPosts: () => request<Post[]>('/posts'),
+  createPost: (content: string) => request<Post>('/posts', { method: 'POST', body: JSON.stringify({ content }) }),
+  pinPost: (postId: number, pinned: boolean) =>
+    request<Post>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
+  deletePost: (postId: number) => request<{ ok: boolean }>(`/posts/${postId}`, { method: 'DELETE' }),
+
+  listEquipment: () => request<Equipment[]>('/equipment'),
+  createEquipment: (payload: Equipment) =>
+    request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteEquipment: (equipmentId: string) =>
+    request<{ ok: boolean }>(`/equipment/${equipmentId}`, { method: 'DELETE' }),
+
+  listReservations: (range?: { start: string; end: string }) =>
+    request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),
+  createReservation: (payload: { equipment_id: string; title?: string; start_at: string; end_at: string }) =>
+    request<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(payload) }),
+  deleteReservation: (reservationId: number) =>
+    request<{ ok: boolean }>(`/reservations/${reservationId}`, { method: 'DELETE' }),
 }
