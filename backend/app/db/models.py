@@ -142,6 +142,14 @@ class PostReply(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class AppState(SQLModel, table=True):
+    """Chave-valor de estado interno do Core (ex. "qual semana já teve o
+    lembrete de aniversários"). Uma linha por chave."""
+
+    key: str = Field(primary_key=True)
+    value: str = ""
+
+
 class Notification(SQLModel, table=True):
     """Aviso pessoal pra um usuário. Hoje é gerado quando alguém te
     menciona (@) num post ou resposta do Mural, ou responde um aviso seu —

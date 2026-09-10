@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 
 from app.api import (
+    routes_admin,
     routes_auth,
     routes_equipment,
     routes_events,
@@ -18,6 +19,7 @@ from app.api import (
     routes_reservations,
     routes_search,
 )
+from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.core.security import hash_password
 from app.db.models import User
 from app.db.session import create_db_and_tables, engine
@@ -27,7 +29,9 @@ from app.db.session import create_db_and_tables, engine
 async def lifespan(app: FastAPI):
     create_db_and_tables()
     _bootstrap_super_admin_if_configured()
+    start_scheduler()
     yield
+    shutdown_scheduler()
 
 
 app = FastAPI(title="Horun Core", version="0.1.0", lifespan=lifespan)
@@ -51,6 +55,7 @@ app.include_router(routes_equipment.router)
 app.include_router(routes_reservations.router)
 app.include_router(routes_events.router)
 app.include_router(routes_search.router)
+app.include_router(routes_admin.router)
 app.include_router(routes_proxy.router)
 
 

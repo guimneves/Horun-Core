@@ -9,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
+from app.core.birthdays import birthdays_between
 from app.core.security import (
     SESSION_COOKIE_NAME,
     create_session_token,
@@ -373,14 +374,6 @@ class BirthdayOut(BaseModel):
     month: int
 
 
-def _birthday_on(year: int, month: int, day: int) -> date:
-    try:
-        return date(year, month, day)
-    except ValueError:
-        # 29/02 em ano não bissexto — mostra em 28/02
-        return date(year, 2, 28)
-
-
 @router.get("/users/birthdays", response_model=list[BirthdayOut])
 def users_birthdays(
     _user: CurrentUser,
@@ -391,25 +384,17 @@ def users_birthdays(
     """Aniversários que caem no intervalo [start, end] — projeção dos
     perfis, sem tabela. A Agenda pede a semana; o widget do Mural, os
     próximos dias."""
-    out: list[BirthdayOut] = []
-    for u in session.exec(select(User)).all():
-        if not u.birth_day or not u.birth_month:
-            continue
-        for year in range(start.year, end.year + 1):
-            occ = _birthday_on(year, u.birth_month, u.birth_day)
-            if start <= occ <= end:
-                out.append(
-                    BirthdayOut(
-                        user_id=u.id,
-                        name=u.full_name or u.display_name or u.username,
-                        has_photo=u.photo is not None,
-                        date=occ,
-                        day=u.birth_day,
-                        month=u.birth_month,
-                    )
-                )
-    out.sort(key=lambda b: b.date)
-    return out
+    return [
+        BirthdayOut(
+            user_id=u.id,
+            name=u.full_name or u.display_name or u.username,
+            has_photo=u.photo is not None,
+            date=occ,
+            day=u.birth_day,
+            month=u.birth_month,
+        )
+        for u, occ in birthdays_between(session, start, end)
+    ]
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)

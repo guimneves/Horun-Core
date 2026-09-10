@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("CORE_SCHEDULER", "0")  # não subir o agendador nos testes
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
