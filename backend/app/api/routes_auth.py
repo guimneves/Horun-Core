@@ -1,19 +1,29 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, status
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel, field_validator
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
 from app.core.security import (
     SESSION_COOKIE_NAME,
     create_session_token,
+    generate_setup_code,
     hash_password,
     verify_password,
 )
-from app.db.models import User
+from app.db.models import POSITIONS, QUALIFICATIONS, User
 
 router = APIRouter(tags=["auth"])
+
+_MAX_PHOTO_BYTES = 2 * 1024 * 1024  # 2 MB — retrato simples, não precisa de mais
+_ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+def _validate_choice(value: str, allowed: list[str], field_name: str) -> str:
+    if value and value not in allowed:
+        raise ValueError(f"{field_name} inválido — use um dos valores permitidos ou deixe em branco.")
+    return value
 
 
 class LoginRequest(BaseModel):
@@ -21,25 +31,75 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SetPasswordRequest(BaseModel):
+    username: str
+    setup_code: str
+    new_password: str
+
+
 class UserOut(BaseModel):
     id: int
     username: str
     display_name: str
+    full_name: str
+    email: str
+    phone: str
+    position: str
+    qualification: str
+    has_photo: bool
     is_super_admin: bool
     is_protected: bool
+    # Só tem valor de verdade logo após a criação (ou depois de
+    # regenerado) — None assim que a pessoa define a própria senha.
+    setup_code: str | None
 
 
 class CreateUserRequest(BaseModel):
     username: str
-    password: str
+    # Opcional agora: se omitida, a conta nasce sem senha, com um código
+    # de primeiro acesso (ver POST /auth/set-password).
+    password: str | None = None
     display_name: str = ""
+    full_name: str = ""
+    email: str = ""
+    phone: str = ""
+    position: str = ""
+    qualification: str = ""
     is_super_admin: bool = False
+
+    _validate_position = field_validator("position")(lambda v: _validate_choice(v, POSITIONS, "Posição"))
+    _validate_qualification = field_validator("qualification")(
+        lambda v: _validate_choice(v, QUALIFICATIONS, "Qualificação")
+    )
 
 
 class UpdateUserRequest(BaseModel):
+    """Edição por um administrador máximo — inclui campos que a própria
+    pessoa não deveria mudar sozinha (papel, posição/qualificação
+    institucional)."""
+
     display_name: str | None = None
     password: str | None = None
     is_super_admin: bool | None = None
+    position: str | None = None
+    qualification: str | None = None
+
+    _validate_position = field_validator("position")(
+        lambda v: _validate_choice(v, POSITIONS, "Posição") if v is not None else v
+    )
+    _validate_qualification = field_validator("qualification")(
+        lambda v: _validate_choice(v, QUALIFICATIONS, "Qualificação") if v is not None else v
+    )
+
+
+class UpdateProfileRequest(BaseModel):
+    """Edição pela própria pessoa — só dados pessoais (seção "Perfil"),
+    nunca papel/posição/qualificação."""
+
+    display_name: str | None = None
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
 
 
 def _out(user: User) -> UserOut:
@@ -47,15 +107,29 @@ def _out(user: User) -> UserOut:
         id=user.id,
         username=user.username,
         display_name=user.display_name,
+        full_name=user.full_name,
+        email=user.email,
+        phone=user.phone,
+        position=user.position,
+        qualification=user.qualification,
+        has_photo=user.photo is not None,
         is_super_admin=user.is_super_admin,
         is_protected=user.is_protected,
+        setup_code=user.setup_code,
     )
 
 
 @router.post("/auth/login", response_model=UserOut)
 def login(payload: LoginRequest, response: Response, session: SessionDep):
     user = session.exec(select(User).where(User.username == payload.username)).first()
-    if user is None or not verify_password(payload.password, user.password_hash):
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário ou senha inválidos")
+    if user.password_hash is None:
+        raise HTTPException(
+            status.HTTP_428_PRECONDITION_REQUIRED,
+            "Esta conta ainda não tem senha definida — use 'Primeiro acesso' com o código que o administrador te passou.",
+        )
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário ou senha inválidos")
 
     token = create_session_token(user.id)
@@ -65,6 +139,30 @@ def login(payload: LoginRequest, response: Response, session: SessionDep):
         httponly=True,
         samesite="lax",
         max_age=60 * 60 * 12,
+    )
+    return _out(user)
+
+
+@router.post("/auth/set-password", response_model=UserOut)
+def set_password(payload: SetPasswordRequest, response: Response, session: SessionDep):
+    """Primeiro acesso: troca o código de configuração (dado pelo
+    administrador máximo na criação) pela senha definitiva escolhida pela
+    própria pessoa, e já efetua o login."""
+    user = session.exec(select(User).where(User.username == payload.username)).first()
+    if user is None or user.password_hash is not None or user.setup_code != payload.setup_code.upper():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Usuário ou código de primeiro acesso inválido")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A senha precisa ter pelo menos 6 caracteres")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.setup_code = None
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    token = create_session_token(user.id)
+    response.set_cookie(
+        SESSION_COOKIE_NAME, token, httponly=True, samesite="lax", max_age=60 * 60 * 12
     )
     return _out(user)
 
@@ -80,6 +178,60 @@ def me(user: CurrentUser):
     return _out(user)
 
 
+@router.patch("/auth/me", response_model=UserOut)
+def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: SessionDep):
+    """Autoatendimento — cada pessoa cadastra os próprios dados pessoais
+    (pedido do usuário), sem precisar do administrador máximo."""
+    if payload.display_name is not None:
+        user.display_name = payload.display_name
+    if payload.full_name is not None:
+        user.full_name = payload.full_name
+    if payload.email is not None:
+        user.email = payload.email
+    if payload.phone is not None:
+        user.phone = payload.phone
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _out(user)
+
+
+@router.post("/auth/me/photo", response_model=UserOut)
+async def upload_my_photo(file: UploadFile, user: CurrentUser, session: SessionDep):
+    if file.content_type not in _ALLOWED_PHOTO_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Formato de imagem não suportado (use JPEG, PNG ou WEBP)")
+    data = await file.read()
+    if len(data) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Imagem grande demais (máximo 2 MB)")
+
+    user.photo = data
+    user.photo_content_type = file.content_type
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _out(user)
+
+
+@router.delete("/auth/me/photo", response_model=UserOut)
+def delete_my_photo(user: CurrentUser, session: SessionDep):
+    user.photo = None
+    user.photo_content_type = None
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _out(user)
+
+
+@router.get("/users/{user_id}/photo")
+def get_user_photo(user_id: int, _user: CurrentUser, session: SessionDep):
+    """Servida separada do resto do perfil (ver UserOut) — assim listar
+    usuários nunca fica pesado carregando bytes de imagem à toa."""
+    user = session.get(User, user_id)
+    if user is None or user.photo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sem foto")
+    return Response(content=user.photo, media_type=user.photo_content_type or "application/octet-stream")
+
+
 @router.post("/users", response_model=UserOut)
 def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: SessionDep):
     """Só o administrador máximo cria usuários locais — importação
@@ -91,8 +243,14 @@ def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: Ses
 
     user = User(
         username=payload.username,
-        password_hash=hash_password(payload.password),
+        password_hash=hash_password(payload.password) if payload.password else None,
+        setup_code=None if payload.password else generate_setup_code(),
         display_name=payload.display_name or payload.username,
+        full_name=payload.full_name,
+        email=payload.email,
+        phone=payload.phone,
+        position=payload.position,
+        qualification=payload.qualification,
         is_super_admin=payload.is_super_admin,
     )
     session.add(user)
@@ -122,8 +280,32 @@ def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser
         user.display_name = payload.display_name
     if payload.password is not None:
         user.password_hash = hash_password(payload.password)
+        user.setup_code = None
     if payload.is_super_admin is not None:
         user.is_super_admin = payload.is_super_admin
+    if payload.position is not None:
+        user.position = payload.position
+    if payload.qualification is not None:
+        user.qualification = payload.qualification
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _out(user)
+
+
+@router.post("/users/{user_id}/regenerate-setup-code", response_model=UserOut)
+def regenerate_setup_code(user_id: int, _admin: SuperAdminUser, session: SessionDep):
+    """Perdeu o código de primeiro acesso, ou quer voltar alguém pro fluxo
+    de 'defina sua senha' (ex. esqueceu a senha e não quer que o admin
+    saiba a nova)."""
+    user = session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")
+    if user.is_protected:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta é a conta protegida do Core — não pode ser alterada.")
+
+    user.password_hash = None
+    user.setup_code = generate_setup_code()
     session.add(user)
     session.commit()
     session.refresh(user)

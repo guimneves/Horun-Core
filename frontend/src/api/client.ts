@@ -1,6 +1,6 @@
 // Cliente HTTP do Horun Core — mesmo padrão do RE7S
 // (Rock Eval Horun Dev/frontend/src/api/client.ts).
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 export class ApiError extends Error {
   status: number
@@ -39,9 +39,31 @@ export interface CurrentUser {
   id: number
   username: string
   display_name: string
+  full_name: string
+  email: string
+  phone: string
+  position: string
+  qualification: string
+  has_photo: boolean
   is_super_admin: boolean
   is_protected: boolean
+  setup_code: string | null
 }
+
+// Mesmas listas de app/db/models.py (POSITIONS/QUALIFICATIONS) — a
+// validação de verdade é sempre no backend, isto é só pra montar os
+// <select> do formulário sem uma chamada de API extra.
+export const POSITIONS = ['Pesquisador(a)', 'Coordenador(a)', 'Técnico(a)', 'Iniciação Científica']
+export const QUALIFICATIONS = [
+  'Professor(a)',
+  'Doutor(a)',
+  'Doutorando(a)',
+  'Mestre(a)',
+  'Mestrando(a)',
+  'Graduado(a)',
+  'Graduando(a)',
+  'Técnico(a)',
+]
 
 export interface ModuleStatus {
   id: string
@@ -118,10 +140,48 @@ export const api = {
     request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   me: () => request<CurrentUser>('/auth/me'),
+  setPassword: (username: string, setupCode: string, newPassword: string) =>
+    request<CurrentUser>('/auth/set-password', {
+      method: 'POST',
+      body: JSON.stringify({ username, setup_code: setupCode, new_password: newPassword }),
+    }),
+  updateProfile: (payload: { display_name?: string; full_name?: string; email?: string; phone?: string }) =>
+    request<CurrentUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+  uploadMyPhoto: async (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`${API_BASE}/auth/me/photo`, { method: 'POST', credentials: 'include', body: form })
+    if (!res.ok) {
+      let message = res.statusText
+      try {
+        message = (await res.json()).detail ?? message
+      } catch {
+        // corpo sem JSON — mantém statusText
+      }
+      throw new ApiError(res.status, message)
+    }
+    return res.json() as Promise<CurrentUser>
+  },
+  deleteMyPhoto: () => request<CurrentUser>('/auth/me/photo', { method: 'DELETE' }),
 
   listUsers: () => request<CurrentUser[]>('/users'),
-  createUser: (payload: { username: string; password: string; display_name?: string; is_super_admin?: boolean }) =>
-    request<CurrentUser>('/users', { method: 'POST', body: JSON.stringify(payload) }),
+  createUser: (payload: {
+    username: string
+    password?: string
+    display_name?: string
+    full_name?: string
+    email?: string
+    phone?: string
+    position?: string
+    qualification?: string
+    is_super_admin?: boolean
+  }) => request<CurrentUser>('/users', { method: 'POST', body: JSON.stringify(payload) }),
+  updateUser: (
+    userId: number,
+    payload: { display_name?: string; password?: string; is_super_admin?: boolean; position?: string; qualification?: string },
+  ) => request<CurrentUser>(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  regenerateSetupCode: (userId: number) =>
+    request<CurrentUser>(`/users/${userId}/regenerate-setup-code`, { method: 'POST' }),
   deleteUser: (userId: number) => request<{ ok: boolean }>(`/users/${userId}`, { method: 'DELETE' }),
 
   dashboardModules: () => request<ModuleStatus[]>('/dashboard/modules'),

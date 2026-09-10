@@ -27,6 +27,14 @@ def hash_password(password: str) -> str:
     return _pwd_context.hash(password)
 
 
+def generate_setup_code() -> str:
+    """Código de primeiro acesso — dado pelo administrador máximo a quem
+    ele cadastra sem senha (seção "Criação sem senha"). Curto o bastante
+    pra repassar verbalmente/por escrito, aleatório o bastante pra não ser
+    adivinhado."""
+    return secrets.token_hex(3).upper()
+
+
 def verify_password(password: str, password_hash: str) -> bool:
     return _pwd_context.verify(password, password_hash)
 

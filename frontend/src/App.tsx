@@ -8,6 +8,7 @@ import { MuralPage } from './pages/MuralPage'
 import { ModulesPage } from './pages/ModulesPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { AdminPage } from './pages/AdminPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { Avatar } from './components/Avatar'
 import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon, BellIcon } from './icons'
 
@@ -53,7 +54,7 @@ function EmbeddedModulesNav() {
 }
 
 function SideNav() {
-  const { user } = useAuth()
+  const { user, userVersion } = useAuth()
   return (
     <div
       className="flex w-[232px] flex-shrink-0 flex-col justify-between p-3 pt-5"
@@ -87,18 +88,19 @@ function SideNav() {
       </div>
 
       {user && (
-        <div
+        <Link
+          to="/perfil"
           className="flex items-center gap-2.5 rounded-[10px] p-3"
           style={{ background: 'var(--color-surface)' }}
         >
-          <Avatar name={user.display_name || user.username} size={32} />
+          <Avatar name={user.display_name || user.username} size={32} userId={user.id} cacheBust={userVersion} />
           <div className="min-w-0">
             <div className="truncate text-[12.5px] font-semibold">{user.display_name || user.username}</div>
             <div className="text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>
               {user.is_super_admin ? 'Administrador máximo' : 'Usuário'}
             </div>
           </div>
-        </div>
+        </Link>
       )}
     </div>
   )
@@ -196,6 +198,16 @@ export default function App() {
               <RequireAuth>
                 <Shell>
                   <AgendaPage />
+                </Shell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/perfil"
+            element={
+              <RequireAuth>
+                <Shell>
+                  <ProfilePage />
                 </Shell>
               </RequireAuth>
             }

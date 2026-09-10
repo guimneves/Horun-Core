@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import {
   api,
   ApiError,
+  POSITIONS,
+  QUALIFICATIONS,
   type CurrentUser,
   type Equipment,
   type ModuleAccessEntry,
@@ -67,6 +69,41 @@ function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement> & { label
   )
 }
 
+function FieldSelect({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: readonly string[]
+  placeholder: string
+}) {
+  return (
+    <div className="mb-3.5">
+      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+        style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function PrimaryButton({ children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
@@ -79,86 +116,222 @@ function PrimaryButton({ children, ...rest }: React.ButtonHTMLAttributes<HTMLBut
   )
 }
 
+function SmallSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  disabled,
+}: {
+  value: string
+  onChange: (value: string) => void
+  options: readonly string[]
+  placeholder: string
+  disabled?: boolean
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-md px-2 py-1 text-xs outline-none disabled:opacity-50"
+      style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((opt) => (
+        <option key={opt} value={opt}>
+          {opt}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [position, setPosition] = useState('')
+  const [qualification, setQualification] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [justCreated, setJustCreated] = useState<{ username: string; code: string } | null>(null)
+  const [regenerated, setRegenerated] = useState<{ username: string; code: string } | null>(null)
 
   async function handleCreate() {
     setError(null)
+    setJustCreated(null)
     try {
-      await api.createUser({ username, password })
+      const created = await api.createUser({
+        username,
+        password: password || undefined,
+        position: position || undefined,
+        qualification: qualification || undefined,
+      })
       setUsername('')
       setPassword('')
+      setPosition('')
+      setQualification('')
+      if (created.setup_code) setJustCreated({ username: created.username, code: created.setup_code })
       onChange()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao criar usuário.')
     }
   }
 
+  async function handleRegenerate(u: CurrentUser) {
+    const updated = await api.regenerateSetupCode(u.id)
+    if (updated.setup_code) setRegenerated({ username: updated.username, code: updated.setup_code })
+    onChange()
+  }
+
   return (
     <div className="flex gap-5">
-      <Table>
-        <thead>
-          <tr>
-            <Th>Usuário</Th>
-            <Th>Papel</Th>
-            <Th>Status</Th>
-            <Th right>Ações</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <Td>
-                <div className="flex items-center gap-2.5">
-                  <Avatar name={u.display_name || u.username} size={30} />
-                  <span className="font-medium">{u.display_name || u.username}</span>
-                </div>
-              </Td>
-              <Td>
-                {u.is_super_admin ? (
-                  <span
-                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
-                    style={{ color: 'var(--color-primary)', background: 'var(--color-surface)' }}
-                  >
-                    Administrador máximo
-                  </span>
-                ) : (
-                  <span style={{ color: 'var(--color-text-muted)' }}>Usuário</span>
-                )}
-              </Td>
-              <Td>
-                {u.is_protected && (
-                  <span
-                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
-                    style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}
-                  >
-                    Protegida
-                  </span>
-                )}
-              </Td>
-              <Td right>
-                {!u.is_protected && (
-                  <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteUser(u.id).then(onChange)}>
-                    remover
-                  </button>
-                )}
-              </Td>
+      <div className="flex-1">
+        {(justCreated || regenerated) && (
+          <div
+            className="mb-4 rounded-xl border p-4 text-[13px]"
+            style={{ borderColor: 'var(--color-primary)', background: 'var(--color-bg-elevated)' }}
+          >
+            <div className="mb-1 font-semibold">
+              Código de primeiro acesso para <strong>{(justCreated ?? regenerated)!.username}</strong>
+            </div>
+            <div className="mb-2" style={{ color: 'var(--color-text-muted)' }}>
+              Passe este código para a pessoa. Em "Primeiro acesso" na tela de login, ela usa o usuário e o código
+              para definir a própria senha.
+            </div>
+            <div className="flex items-center gap-3">
+              <code
+                className="rounded-lg px-3 py-1.5 text-base font-bold tracking-widest"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-primary)' }}
+              >
+                {(justCreated ?? regenerated)!.code}
+              </code>
+              <button
+                className="text-xs"
+                style={{ color: 'var(--color-text-muted)' }}
+                onClick={() => {
+                  setJustCreated(null)
+                  setRegenerated(null)
+                }}
+              >
+                dispensar
+              </button>
+            </div>
+          </div>
+        )}
+
+        <Table>
+          <thead>
+            <tr>
+              <Th>Usuário</Th>
+              <Th>Posição</Th>
+              <Th>Qualificação</Th>
+              <Th>Papel</Th>
+              <Th>Status</Th>
+              <Th right>Ações</Th>
             </tr>
-          ))}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <Td>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={u.display_name || u.username} size={30} userId={u.id} />
+                    <span className="font-medium">{u.display_name || u.username}</span>
+                  </div>
+                </Td>
+                <Td>
+                  <SmallSelect
+                    value={u.position}
+                    disabled={u.is_protected}
+                    placeholder="—"
+                    options={POSITIONS}
+                    onChange={(value) => api.updateUser(u.id, { position: value }).then(onChange)}
+                  />
+                </Td>
+                <Td>
+                  <SmallSelect
+                    value={u.qualification}
+                    disabled={u.is_protected}
+                    placeholder="—"
+                    options={QUALIFICATIONS}
+                    onChange={(value) => api.updateUser(u.id, { qualification: value }).then(onChange)}
+                  />
+                </Td>
+                <Td>
+                  {u.is_super_admin ? (
+                    <span
+                      className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                      style={{ color: 'var(--color-primary)', background: 'var(--color-surface)' }}
+                    >
+                      Administrador máximo
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--color-text-muted)' }}>Usuário</span>
+                  )}
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    {u.is_protected && (
+                      <span
+                        className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                        style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}
+                      >
+                        Protegida
+                      </span>
+                    )}
+                    {u.setup_code && (
+                      <span
+                        className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                        style={{ color: '#a3690f', background: 'var(--color-surface)' }}
+                      >
+                        Aguardando 1º acesso
+                      </span>
+                    )}
+                  </div>
+                </Td>
+                <Td right>
+                  <div className="flex items-center justify-end gap-3">
+                    {!u.is_protected && (
+                      <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
+                        {u.setup_code ? 'ver código' : 'gerar novo acesso'}
+                      </button>
+                    )}
+                    {!u.is_protected && (
+                      <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteUser(u.id).then(onChange)}>
+                        remover
+                      </button>
+                    )}
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
 
       <CreatePanel title="Novo usuário">
         <FieldInput label="Usuário" placeholder="usuario.sobrenome" value={username} onChange={(e) => setUsername(e.target.value)} />
-        <FieldInput label="Senha provisória" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <FieldInput
+          label="Senha provisória (opcional)"
+          type="password"
+          placeholder="deixe em branco p/ código de acesso"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <FieldSelect label="Posição" value={position} onChange={setPosition} options={POSITIONS} placeholder="Selecione…" />
+        <FieldSelect
+          label="Qualificação"
+          value={qualification}
+          onChange={setQualification}
+          options={QUALIFICATIONS}
+          placeholder="Selecione…"
+        />
         {error && (
           <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>
             {error}
           </p>
         )}
-        <PrimaryButton onClick={handleCreate} disabled={!username || !password}>
+        <PrimaryButton onClick={handleCreate} disabled={!username}>
           Criar usuário
         </PrimaryButton>
       </CreatePanel>

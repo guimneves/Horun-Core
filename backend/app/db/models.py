@@ -29,11 +29,47 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Listas fechadas — pedido do usuário. Guardadas como texto simples (não
+# como Enum de banco) de propósito: SQLAlchemy/SQLModel tem pegadinhas de
+# migração com Enum nativo (ver nota em routes_auth.py), e como a validação
+# já acontece na API (Pydantic/Literal), uma coluna de texto simples evita
+# esse problema inteiro sem perder nada.
+POSITIONS = ["Pesquisador(a)", "Coordenador(a)", "Técnico(a)", "Iniciação Científica"]
+QUALIFICATIONS = [
+    "Professor(a)",
+    "Doutor(a)",
+    "Doutorando(a)",
+    "Mestre(a)",
+    "Mestrando(a)",
+    "Graduado(a)",
+    "Graduando(a)",
+    "Técnico(a)",
+]
+
+
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
-    password_hash: str
+    # Opcional agora — ver seção "Criação sem senha" em routes_auth.py:
+    # uma conta pode nascer sem senha, com um código de primeiro acesso em
+    # `setup_code`, até a própria pessoa definir a senha dela.
+    password_hash: Optional[str] = None
+    setup_code: Optional[str] = None
     display_name: str = ""
+    full_name: str = ""
+    email: str = ""
+    phone: str = ""
+    # Um dos valores de POSITIONS/QUALIFICATIONS acima, ou "" (não
+    # definido) — atribuído pelo administrador máximo, não autoatendido.
+    position: str = ""
+    qualification: str = ""
+    # Foto de perfil — guardada no próprio banco (bytes), não em disco:
+    # time pequeno, evita depender de um volume/servidor de arquivos
+    # separado. Nunca incluída nas respostas normais de usuário (ver
+    # UserOut em routes_auth.py) — só servida por GET /users/{id}/photo,
+    # pra não pesar toda lista/login com o conteúdo da imagem.
+    photo: Optional[bytes] = None
+    photo_content_type: Optional[str] = None
     is_super_admin: bool = Field(default=False)
     # Conta de bootstrap protegida — mesmo raciocínio do RE7S (ver
     # app/api/routes_auth.py): sempre precisa existir um acesso de backup.

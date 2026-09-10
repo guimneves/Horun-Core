@@ -136,7 +136,7 @@ export function MentionTextarea({
               className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
               style={{ background: i === highlighted ? 'var(--color-surface)' : 'transparent' }}
             >
-              <Avatar name={u.display_name} size={24} />
+              <Avatar name={u.display_name} size={24} userId={u.id} />
               <div>
                 <div className="font-medium">{u.display_name}</div>
                 <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>

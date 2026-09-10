@@ -40,7 +40,7 @@ function Composer({ onPosted }: { onPosted: () => void }) {
       className="flex items-start gap-3 rounded-2xl border p-4"
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
-      <Avatar name={user?.display_name || user?.username || '?'} size={36} />
+      <Avatar name={user?.display_name || user?.username || '?'} size={36} userId={user?.id} />
       <div className="flex-1">
         <MentionTextarea
           value={content}
@@ -70,7 +70,7 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
   const canDelete = user?.is_super_admin || user?.id === reply.author_id
   return (
     <div className="flex gap-2.5">
-      <Avatar name={reply.author_display_name} size={26} />
+      <Avatar name={reply.author_display_name} size={26} userId={reply.author_id} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[12.5px] font-semibold">{reply.author_display_name}</span>
@@ -94,6 +94,7 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
 }
 
 function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void }) {
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
@@ -122,7 +123,7 @@ function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void })
 
       {open ? (
         <div className="flex items-start gap-2.5">
-          <Avatar name="" size={26} />
+          <Avatar name={user?.display_name || user?.username || '?'} size={26} userId={user?.id} />
           <div className="flex-1">
             <MentionTextarea
               value={content}
@@ -168,7 +169,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
       <div className="flex gap-3">
-        <Avatar name={post.author_display_name} size={36} />
+        <Avatar name={post.author_display_name} size={36} userId={post.author_id} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[13.5px] font-semibold">{post.author_display_name}</span>
