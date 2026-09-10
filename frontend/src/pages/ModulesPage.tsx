@@ -64,14 +64,24 @@ export function ModulesPage() {
 
             <div className="mt-4">
               {m.has_access ? (
-                <button
-                  className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-                  style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-                  disabled
-                  title="Encaixe da interface do módulo dentro do Core ainda não implementado (Prompt_Horun_Core.md, seção 8) — por enquanto o dashboard só mostra status e permissão."
-                >
-                  Abrir (em breve)
-                </button>
+                m.embeddable ? (
+                  <a
+                    href={`/m/${m.id}/`}
+                    className="inline-block rounded-md px-3 py-1.5 text-sm font-medium"
+                    style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+                  >
+                    Abrir
+                  </a>
+                ) : (
+                  <button
+                    className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                    style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+                    disabled
+                    title="Este módulo ainda não suporta interface embutida no Core (Prompt_Horun_Core.md, seção 8)."
+                  >
+                    Abrir (em breve)
+                  </button>
+                )
               ) : (
                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   Sem permissão — solicite ao administrador.

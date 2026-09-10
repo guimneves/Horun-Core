@@ -3,18 +3,22 @@ identidade do usuário já autenticado no Core via cabeçalhos internos
 confiáveis (Prompt_Horun_Core.md, seção 1 e 3 — mesmo contrato que
 module-template/backend/app/core/identity.py espera).
 
-Cobre hoje o encaminhamento de chamadas de API (`/m/{id}/api/...`). O
-encaixe do *frontend* de um módulo dentro do mesmo caminho (a SPA do
-módulo precisaria ser buildada com um base path correspondente) é um
-próximo passo — ver Prompt_Horun_Core.md, seção 8. Por ora, o dashboard só
-usa este proxy para health check e chamadas de API; abrir a interface de
-um módulo ainda aponta para o endereço próprio dele.
+Encaixe de interface (Prompt_Horun_Core.md, seção 8, item 1): `/m/{id}/*`
+atende dois tipos de requisição, distinguidos pelo primeiro segmento do
+caminho —
+  - `api/...` → API do módulo, vai para `module.internal_base_url`;
+  - qualquer outra coisa (`/`, `/fila`, `/assets/x.js`, ...) → estáticos
+    da SPA do módulo, vai para `module.internal_frontend_url` (só existe
+    se o módulo suportar o encaixe — senão, 404).
+Em ambos os casos a permissão (`UserModuleAccess`) é checada antes —
+inclusive pro HTML/JS da SPA, que só deve chegar a quem tem acesso.
 """
 
 from __future__ import annotations
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -42,6 +46,14 @@ def _has_access(session: SessionDep, user_id: int, is_super_admin: bool, module_
     return grant is not None
 
 
+@router.get("/m/{module_id}")
+def redirect_to_trailing_slash(module_id: str):
+    """`/m/amostras` (sem barra final) não bate com a rota abaixo — o link
+    de navegação sempre usa barra final, mas alguém pode digitar/colar sem
+    ela. Redireciona em vez de dar 404."""
+    return RedirectResponse(url=f"/m/{module_id}/")
+
+
 @router.api_route(
     "/m/{module_id}/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -54,7 +66,18 @@ async def proxy(module_id: str, path: str, request: Request, user: CurrentUser, 
     if not _has_access(session, user.id, user.is_super_admin, module_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para este módulo")
 
-    target_url = module.internal_base_url.rstrip("/") + "/" + path.lstrip("/")
+    is_api_call = path == "api" or path.startswith("api/")
+    if is_api_call:
+        upstream_base = module.internal_base_url
+    else:
+        if not module.internal_frontend_url:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"Módulo '{module_id}' não suporta interface embutida no Core ainda.",
+            )
+        upstream_base = module.internal_frontend_url
+
+    target_url = upstream_base.rstrip("/") + "/" + path.lstrip("/")
 
     forward_headers = {
         k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP

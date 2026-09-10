@@ -51,6 +51,7 @@ export interface ModuleStatus {
   icon: string
   status: 'online' | 'offline'
   has_access: boolean
+  embeddable: boolean
 }
 
 export interface ModuleFull {
@@ -61,6 +62,7 @@ export interface ModuleFull {
   icon: string
   internal_base_url: string
   health_path: string
+  internal_frontend_url: string
 }
 
 export interface ModuleAccessEntry {

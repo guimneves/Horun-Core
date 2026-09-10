@@ -13,9 +13,17 @@
 	}
 
 	# Tudo sob /api vai pro backend do Core (prefixo removido antes de
-	# chegar lá — nenhuma rota do FastAPI usa "/api", incluindo as de
-	# proxy pra dentro de um módulo, /m/{id}/...; ver app/api/routes_proxy.py).
+	# chegar lá — nenhuma rota do FastAPI usa "/api" nesse nível, exceto
+	# dentro de /m/{id}/..., que é outro caso, abaixo).
 	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# /m/{id}/... vai pro backend do Core SEM remover o prefixo — a rota
+	# /m/{module_id}/{path} (app/api/routes_proxy.py) espera o caminho
+	# inteiro, e decide sozinha se é API ou interface (estáticos) do
+	# módulo, e pra qual container encaminhar.
+	handle /m/* {
 		reverse_proxy backend:8000
 	}
 

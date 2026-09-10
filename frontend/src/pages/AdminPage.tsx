@@ -170,15 +170,26 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [frontendUrl, setFrontendUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
     setError(null)
     try {
-      await api.createModule({ id, display_name: displayName, codename: '', description: '', icon: '🧪', internal_base_url: baseUrl, health_path: '/health' })
+      await api.createModule({
+        id,
+        display_name: displayName,
+        codename: '',
+        description: '',
+        icon: '🧪',
+        internal_base_url: baseUrl,
+        health_path: '/health',
+        internal_frontend_url: frontendUrl,
+      })
       setId('')
       setDisplayName('')
       setBaseUrl('')
+      setFrontendUrl('')
       onChange()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao cadastrar módulo.')
@@ -219,7 +230,13 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
       <CreatePanel title="Cadastrar módulo">
         <FieldInput label="Id (slug)" placeholder="ex.: re7s" value={id} onChange={(e) => setId(e.target.value)} />
         <FieldInput label="Nome público" placeholder="ex.: RE7S" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        <FieldInput label="URL interna" placeholder="http://<container>:8000" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+        <FieldInput label="URL interna (backend)" placeholder="http://<container>:8000" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+        <FieldInput
+          label="URL interna (frontend, opcional)"
+          placeholder="http://<container>:80"
+          value={frontendUrl}
+          onChange={(e) => setFrontendUrl(e.target.value)}
+        />
         {error && (
           <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>
             {error}

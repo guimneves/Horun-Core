@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, Link, NavLink } from 'react-router-dom'
 import { ThemeProvider, ThemeToggle, HorunFooter } from '@horun/design-system'
 import { AuthProvider, useAuth } from './auth/AuthContext'
+import { api, type ModuleStatus } from './api/client'
 import { LoginPage } from './pages/LoginPage'
 import { MuralPage } from './pages/MuralPage'
 import { ModulesPage } from './pages/ModulesPage'
@@ -9,11 +11,46 @@ import { AdminPage } from './pages/AdminPage'
 import { Avatar } from './components/Avatar'
 import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon, BellIcon } from './icons'
 
-const NAV_ITEMS = [
-  { to: '/', label: 'Mural', icon: MuralIcon, end: true },
-  { to: '/modulos', label: 'Módulos', icon: ModulesIcon },
-  { to: '/agenda', label: 'Agenda', icon: AgendaIcon },
-]
+const NAV_ITEMS = [{ to: '/', label: 'Mural', icon: MuralIcon, end: true }]
+
+const navLinkStyle = ({ isActive }: { isActive: boolean }) => ({
+  background: isActive ? 'var(--color-surface)' : 'transparent',
+  color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
+})
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm' + (isActive ? ' font-semibold' : '')
+
+function EmbeddedModulesNav() {
+  const [modules, setModules] = useState<ModuleStatus[]>([])
+
+  useEffect(() => {
+    api.dashboardModules().then(setModules).catch(() => {})
+  }, [])
+
+  // Só módulos com acesso e com interface encaixada no Core — os demais
+  // continuam só visíveis na página "Módulos" (catálogo/status geral).
+  const embedded = modules.filter((m) => m.has_access && m.embeddable)
+  if (embedded.length === 0) return null
+
+  return (
+    <>
+      {embedded.map((m) => (
+        // <a> normal, não <Link>: cada módulo é uma SPA própria, buildada
+        // e servida separadamente — precisa de um carregamento de página
+        // de verdade, não navegação client-side do React Router do Core.
+        <a
+          key={m.id}
+          href={`/m/${m.id}/`}
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm"
+          style={{ color: 'var(--color-text)' }}
+        >
+          <span className="w-[19px] text-center">{m.icon}</span>
+          {m.display_name}
+        </a>
+      ))}
+    </>
+  )
+}
 
 function SideNav() {
   const { user } = useAuth()
@@ -24,33 +61,25 @@ function SideNav() {
     >
       <div className="flex flex-col gap-0.5">
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm' + (isActive ? ' font-semibold' : '')
-            }
-            style={({ isActive }) => ({
-              background: isActive ? 'var(--color-surface)' : 'transparent',
-              color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-            })}
-          >
+          <NavLink key={to} to={to} end={end} className={navLinkClass} style={navLinkStyle}>
             <Icon />
             {label}
           </NavLink>
         ))}
+
+        <EmbeddedModulesNav />
+
+        <NavLink to="/modulos" className={navLinkClass} style={navLinkStyle}>
+          <ModulesIcon />
+          Módulos
+        </NavLink>
+        <NavLink to="/agenda" className={navLinkClass} style={navLinkStyle}>
+          <AgendaIcon />
+          Agenda
+        </NavLink>
+
         {user?.is_super_admin && (
-          <NavLink
-            to="/admin"
-            className={({ isActive }) =>
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm' + (isActive ? ' font-semibold' : '')
-            }
-            style={({ isActive }) => ({
-              background: isActive ? 'var(--color-surface)' : 'transparent',
-              color: isActive ? 'var(--color-primary)' : 'var(--color-text)',
-            })}
-          >
+          <NavLink to="/admin" className={navLinkClass} style={navLinkStyle}>
             <AdminIcon />
             Administração
           </NavLink>

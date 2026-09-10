@@ -25,6 +25,7 @@ class ModuleIn(BaseModel):
     icon: str = "🧪"
     internal_base_url: str
     health_path: str = "/health"
+    internal_frontend_url: str = ""
 
 
 class ModuleOut(BaseModel):
@@ -35,6 +36,7 @@ class ModuleOut(BaseModel):
     icon: str
     internal_base_url: str
     health_path: str
+    internal_frontend_url: str
 
 
 class ModuleStatusOut(BaseModel):
@@ -45,6 +47,9 @@ class ModuleStatusOut(BaseModel):
     icon: str
     status: str  # "online" | "offline"
     has_access: bool
+    # Se True, a interface do módulo pode ser aberta dentro do Core
+    # (GET /m/{id}/) — ver Prompt_Horun_Core.md, seção 8.
+    embeddable: bool
 
 
 def _out(m: Module) -> ModuleOut:
@@ -56,6 +61,7 @@ def _out(m: Module) -> ModuleOut:
         icon=m.icon,
         internal_base_url=m.internal_base_url,
         health_path=m.health_path,
+        internal_frontend_url=m.internal_frontend_url,
     )
 
 
@@ -137,6 +143,7 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
                 icon=m.icon,
                 status="online" if online else "offline",
                 has_access=user.is_super_admin or m.id in access_ids,
+                embeddable=bool(m.internal_frontend_url),
             )
         )
     return out

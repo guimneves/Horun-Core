@@ -51,6 +51,10 @@ class Module(SQLModel, table=True):
     icon: str = "🧪"
     internal_base_url: str  # ex. "http://re7s-backend:8000" — só resolve na rede Docker do servidor
     health_path: str = "/health"
+    # Container que serve a SPA (estáticos) do módulo, ex.
+    # "http://amostras-frontend:80" — vazio se o módulo ainda não suporta
+    # o encaixe de interface dentro do Core (Prompt_Horun_Core.md, seção 8).
+    internal_frontend_url: str = ""
     created_at: datetime = Field(default_factory=utcnow)
 
 

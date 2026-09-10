@@ -151,6 +151,29 @@ Use essas variáveis CSS (`var(--color-primary)` etc.) em vez de cores fixas nos
 
 **Chamadas HTTP**: nenhuma configuração especial de CORS ou header de autenticação manual no cliente — quando plugado no Core, tudo roda na mesma origem, e a identidade chega ao backend via cabeçalho injetado pelo gateway, não pelo frontend. Em desenvolvimento standalone, o frontend fala direto com `http://localhost:8000`.
 
+**Encaixe da interface dentro do Core — convenção validada (Prompt_Horun_Core.md, seção 8)**: em produção, o Core serve a sua SPA sob `/m/<id>/` (ex. `/m/amostras/`), e suas chamadas de API (que já devem começar com `/api/...`, ex. `/api/samples`) precisam sair com esse mesmo prefixo (`/m/amostras/api/samples`), porque é assim que o gateway do Core sabe pra qual módulo/backend encaminhar. Três ajustes cobrem isso, todos usando `import.meta.env.BASE_URL` (variável que o próprio Vite já preenche a partir do `--base` do build — nada de inventar uma env var nova):
+
+```tsx
+// main.tsx — o router precisa saber que vive sob um sub-caminho
+<BrowserRouter basename={import.meta.env.BASE_URL}>
+```
+
+```ts
+// lib/api.ts (ou onde estiver o API_BASE) — produção usa o mesmo prefixo
+const API_BASE = import.meta.env.DEV
+  ? "http://localhost:8000"
+  : import.meta.env.BASE_URL.replace(/\/$/, "");
+```
+
+```dockerfile
+# frontend/Dockerfile — o prefixo entra como build arg, não fica hardcoded
+ARG VITE_BASE=/
+...
+RUN npm run build -- --base=$VITE_BASE
+```
+
+O `docker-compose.yml` do módulo passa `VITE_BASE=/m/<id>/` nesse build arg, e o serviço do frontend entra na `horun-network` com um `container_name` previsível (ex. `amostras-frontend`) — é esse nome que o administrador do Core cadastra como `internal_frontend_url` do módulo. Sem esses três ajustes, o módulo continua funcionando perfeitamente sozinho (`VITE_BASE` default `/`) — só não pode ser aberto de dentro do Core ainda.
+
 ## 7. O que entregar ao final
 
 1. Código completo do backend e frontend seguindo a estrutura acima.
