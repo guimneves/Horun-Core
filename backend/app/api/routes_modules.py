@@ -53,14 +53,17 @@ class ModuleStatusOut(BaseModel):
 
 
 def _out(m: Module) -> ModuleOut:
+    # `or ...` de defesa: um módulo cadastrado numa versão antiga pode ter
+    # colunas NULL (ex. internal_frontend_url veio depois) — não pode
+    # derrubar GET /modules com 500. A migração já preenche; isto é cinto.
     return ModuleOut(
         id=m.id,
-        display_name=m.display_name,
-        description=m.description,
-        icon=m.icon,
-        internal_base_url=m.internal_base_url,
-        health_path=m.health_path,
-        internal_frontend_url=m.internal_frontend_url,
+        display_name=m.display_name or m.id,
+        description=m.description or "",
+        icon=m.icon or "🧪",
+        internal_base_url=m.internal_base_url or "",
+        health_path=m.health_path or "/health",
+        internal_frontend_url=m.internal_frontend_url or "",
     )
 
 
@@ -108,7 +111,10 @@ def delete_module(module_id: str, _admin: SuperAdminUser, session: SessionDep):
 
 
 async def _check_module_online(module: Module) -> bool:
-    url = module.internal_base_url.rstrip("/") + module.health_path
+    base = (module.internal_base_url or "").rstrip("/")
+    if not base:
+        return False
+    url = base + (module.health_path or "/health")
     try:
         async with httpx.AsyncClient(timeout=settings.module_health_timeout_seconds) as http_client:
             resp = await http_client.get(url)
@@ -136,9 +142,9 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
         out.append(
             ModuleStatusOut(
                 id=m.id,
-                display_name=m.display_name,
-                description=m.description,
-                icon=m.icon,
+                display_name=m.display_name or m.id,
+                description=m.description or "",
+                icon=m.icon or "🧪",
                 status="online" if online else "offline",
                 has_access=user.is_super_admin or m.id in access_ids,
                 embeddable=bool(m.internal_frontend_url),

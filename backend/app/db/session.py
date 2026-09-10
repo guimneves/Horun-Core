@@ -55,12 +55,16 @@ def _backfill_null_text(table: str, columns: tuple[str, ...]) -> None:
 
 
 def _run_migrations() -> None:
+    is_pg = engine.dialect.name == "postgresql"
+    blob = "BYTEA" if is_pg else "BLOB"
+
+    # --- user: colunas de perfil/foto/primeiro-acesso adicionadas depois ---
     _ensure_column("user", "full_name", "VARCHAR")
     _ensure_column("user", "email", "VARCHAR")
     _ensure_column("user", "phone", "VARCHAR")
     _ensure_column("user", "position", "VARCHAR")
     _ensure_column("user", "qualification", "VARCHAR")
-    _ensure_column("user", "photo", "BYTEA" if engine.dialect.name == "postgresql" else "BLOB")
+    _ensure_column("user", "photo", blob)
     _ensure_column("user", "photo_content_type", "VARCHAR")
     _ensure_column("user", "setup_code", "VARCHAR")
     _backfill_null_text("user", _USER_TEXT_COLUMNS)
@@ -69,18 +73,24 @@ def _run_migrations() -> None:
     # pelo default do modelo Python).
     _ensure_column("user", "onboarded", "BOOLEAN DEFAULT TRUE")
 
-    # password_hash era obrigatório (NOT NULL) — agora uma conta pode
-    # nascer sem senha (seção "Criação sem senha"). SQLite não suporta
-    # soltar NOT NULL via ALTER TABLE simples, mas não precisa: um banco
-    # SQLite novo já nasce certo a partir do modelo atual (create_all),
-    # dev sempre recria o arquivo do zero. Só Postgres, com dado real já
-    # gravado antes dessa mudança, precisa do ALTER de verdade.
-    _blob = "BYTEA" if engine.dialect.name == "postgresql" else "BLOB"
-    _ensure_column("post", "attachment", _blob)
+    # --- module: colunas que entraram depois do primeiro deploy (ex.
+    # internal_frontend_url veio junto com o encaixe de interface) — numa
+    # instalação antiga elas não existem e o GET /modules quebra com
+    # "column does not exist". O DEFAULT já preenche as linhas existentes.
+    _ensure_column("module", "description", "VARCHAR DEFAULT ''")
+    _ensure_column("module", "icon", "VARCHAR DEFAULT '🧪'")
+    _ensure_column("module", "health_path", "VARCHAR DEFAULT '/health'")
+    _ensure_column("module", "internal_frontend_url", "VARCHAR DEFAULT ''")
+    _backfill_null_text("module", ("description", "internal_frontend_url", "display_name"))
+
+    # --- post: anexos ---
+    _ensure_column("post", "attachment", blob)
     _ensure_column("post", "attachment_content_type", "VARCHAR")
     _ensure_column("post", "attachment_filename", "VARCHAR")
 
-    if engine.dialect.name == "postgresql":
+    if is_pg:
+        # SQLite não suporta esses ALTER, mas também não precisa: dev sempre
+        # recria o arquivo do zero a partir do modelo atual.
         with engine.begin() as conn:
             conn.exec_driver_sql('ALTER TABLE "user" ALTER COLUMN password_hash DROP NOT NULL')
             # `module.codename` saiu do modelo (codinomes nunca aparecem —
