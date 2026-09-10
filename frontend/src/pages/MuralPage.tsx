@@ -3,20 +3,8 @@ import { api, ApiError, type Equipment, type ModuleStatus, type Post, type Reser
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 import { PinIcon } from '../icons'
-import { toLocalIso } from '../lib/datetime'
+import { timeAgo, toLocalIso } from '../lib/datetime'
 import { MentionTextarea, renderWithMentions } from '../components/MentionTextarea'
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diffMs / 60000)
-  if (minutes < 1) return 'agora'
-  if (minutes < 60) return `há ${minutes} min`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `há ${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days === 1) return 'ontem'
-  return `há ${days} dias`
-}
 
 function Composer({ onPosted }: { onPosted: () => void }) {
   const { user } = useAuth()

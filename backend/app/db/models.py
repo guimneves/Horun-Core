@@ -126,6 +126,22 @@ class PostReply(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class Notification(SQLModel, table=True):
+    """Aviso pessoal pra um usuário. Hoje é gerado quando alguém te
+    menciona (@) num post ou resposta do Mural, ou responde um aviso seu —
+    é o que faz o `@menção` valer a pena (sem isto, ninguém vê que foi
+    marcado). O sininho do topo (App.tsx) lê daqui."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)  # destinatário
+    kind: str  # "mention" | "reply"
+    text: str  # mensagem já pronta pra exibir
+    link: str = "/"  # pra onde levar ao clicar
+    actor_id: Optional[int] = Field(default=None, foreign_key="user.id")  # quem disparou
+    read: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Equipment(SQLModel, table=True):
     """Equipamento reservável na Agenda — conceito separado de `Module`:
     nem todo equipamento tem módulo de software (ex. balança analítica), e

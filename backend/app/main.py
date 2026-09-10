@@ -11,6 +11,7 @@ from app.api import (
     routes_auth,
     routes_equipment,
     routes_modules,
+    routes_notifications,
     routes_posts,
     routes_proxy,
     routes_reservations,
@@ -43,6 +44,7 @@ app.add_middleware(
 app.include_router(routes_auth.router)
 app.include_router(routes_modules.router)
 app.include_router(routes_posts.router)
+app.include_router(routes_notifications.router)
 app.include_router(routes_equipment.router)
 app.include_router(routes_reservations.router)
 app.include_router(routes_proxy.router)

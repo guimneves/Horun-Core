@@ -10,7 +10,8 @@ import { AgendaPage } from './pages/AgendaPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { Avatar } from './components/Avatar'
-import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon, BellIcon } from './icons'
+import { NotificationsBell } from './components/NotificationsBell'
+import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon } from './icons'
 
 const NAV_ITEMS = [{ to: '/', label: 'Mural', icon: MuralIcon, end: true }]
 
@@ -129,7 +130,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-4">
-          <BellIcon style={{ color: 'var(--color-text-muted)' }} />
+          <NotificationsBell />
           <ThemeToggle />
           {user && (
             <button className="text-sm underline" onClick={() => logout()}>

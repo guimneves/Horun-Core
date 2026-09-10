@@ -119,6 +119,17 @@ export interface MentionableUser {
   display_name: string
 }
 
+export interface Notification {
+  id: number
+  kind: 'mention' | 'reply' | string
+  text: string
+  link: string
+  actor_id: number | null
+  actor_display_name: string
+  read: boolean
+  created_at: string
+}
+
 export interface Equipment {
   id: string
   display_name: string
@@ -209,6 +220,10 @@ export const api = {
     request<{ ok: boolean }>(`/posts/${postId}/replies/${replyId}`, { method: 'DELETE' }),
 
   listMentionableUsers: () => request<MentionableUser[]>('/users/mentionable'),
+
+  listNotifications: () => request<Notification[]>('/notifications'),
+  unreadNotificationCount: () => request<{ count: number }>('/notifications/unread-count'),
+  markNotificationsRead: () => request<{ ok: boolean }>('/notifications/mark-read', { method: 'POST' }),
 
   listEquipment: () => request<Equipment[]>('/equipment'),
   createEquipment: (payload: Equipment) =>

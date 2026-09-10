@@ -4,16 +4,51 @@ máximo fixa (pinned) ou remove post/resposta de outra pessoa."""
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
-from app.db.models import Post, PostReply, User
+from app.db.models import Notification, Post, PostReply, User
 
 router = APIRouter(tags=["posts"])
+
+# Mesma forma que o frontend reconhece/destaca (MentionTextarea.tsx):
+# "@" seguido de letras, números, ponto ou hífen.
+_MENTION_RE = re.compile(r"@([\w.-]+)")
+
+
+def _fan_out_notifications(
+    session: Session, *, content: str, actor: User, post: Post, is_reply: bool
+) -> None:
+    """Cria as notificações de um post/resposta recém-criado: uma por
+    pessoa mencionada (@), mais o autor do post quando é uma resposta.
+    Não commita — quem chama commita junto com o post/resposta."""
+    recipients: dict[int, str] = {}  # user_id -> kind ("mention" vence "reply")
+
+    usernames = set(_MENTION_RE.findall(content))
+    if usernames:
+        mentioned = session.exec(select(User).where(User.username.in_(list(usernames)))).all()
+        for u in mentioned:
+            if u.id != actor.id:
+                recipients[u.id] = "mention"
+
+    if is_reply and post.author_id != actor.id:
+        recipients.setdefault(post.author_id, "reply")
+
+    actor_name = actor.display_name or actor.username
+    for user_id, kind in recipients.items():
+        if kind == "mention":
+            onde = "numa resposta" if is_reply else "num aviso"
+            text = f"{actor_name} mencionou você {onde} no Mural"
+        else:
+            text = f"{actor_name} respondeu seu aviso no Mural"
+        session.add(
+            Notification(user_id=user_id, kind=kind, text=text, link="/", actor_id=actor.id)
+        )
 
 
 class CreatePostRequest(BaseModel):
@@ -117,6 +152,8 @@ def create_post(payload: CreatePostRequest, user: CurrentUser, session: SessionD
     session.add(post)
     session.commit()
     session.refresh(post)
+    _fan_out_notifications(session, content=content, actor=user, post=post, is_reply=False)
+    session.commit()
     return _post_out(post, user, session)
 
 
@@ -161,6 +198,8 @@ def create_reply(post_id: int, payload: CreateReplyRequest, user: CurrentUser, s
     session.add(reply)
     session.commit()
     session.refresh(reply)
+    _fan_out_notifications(session, content=content, actor=user, post=post, is_reply=True)
+    session.commit()
     return _reply_out(reply, user)
 
 
