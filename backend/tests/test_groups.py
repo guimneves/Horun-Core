@@ -80,3 +80,57 @@ def test_change_internal_admin(super_admin_client, super_admin_user, admin2):
     # o novo admin interno entra como membro
     members = {m["user_id"] for m in super_admin_client.get(f"/groups/{g['id']}/members").json()}
     assert admin2.id in members
+
+
+# ── Mural de grupo (Fase 2b) ────────────────────────────────────────────
+
+def test_group_post_only_visible_to_members(super_admin_client, admin2, user_a, user_a_client, user_b_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+
+    # user_a (membro) publica no grupo
+    r = user_a_client.post("/posts", data={"content": "aviso do grupo", "group_id": str(g["id"])})
+    assert r.status_code == 200
+    assert r.json()["group_id"] == g["id"]
+
+    # membro vê no feed do grupo
+    assert len(user_a_client.get(f"/posts?group_id={g['id']}").json()) == 1
+    # não-membro é barrado
+    assert user_b_client.get(f"/posts?group_id={g['id']}").status_code == 403
+    # e não aparece no mural do laboratório de ninguém
+    assert user_a_client.get("/posts").json() == []
+    assert user_b_client.get("/posts").json() == []
+
+
+def test_non_member_cannot_post_to_group(super_admin_client, super_admin_user, user_a_client):
+    g = _mk_group(super_admin_client, super_admin_user.id).json()
+    r = user_a_client.post("/posts", data={"content": "invasão", "group_id": str(g["id"])})
+    assert r.status_code == 403
+
+
+def test_any_member_can_post_to_group(super_admin_client, admin2, user_a, user_a_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    r = user_a_client.post("/posts", data={"content": "membro comum postando", "group_id": str(g["id"])})
+    assert r.status_code == 200
+
+
+def test_group_internal_admin_can_pin_and_delete(super_admin_client, admin2, admin2_client, user_a, user_a_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    pid = user_a_client.post("/posts", data={"content": "x", "group_id": str(g["id"])}).json()["id"]
+
+    assert admin2_client.patch(f"/posts/{pid}", json={"pinned": True}).status_code == 200
+    # membro comum não fixa
+    assert user_a_client.patch(f"/posts/{pid}", json={"pinned": False}).status_code == 403
+    # admin interno remove aviso de outra pessoa
+    assert admin2_client.delete(f"/posts/{pid}").status_code == 200
+
+
+def test_group_mention_only_notifies_members(super_admin_client, admin2, admin2_client, user_a, user_a_client, user_b_client, user_b):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    # menciona user_a (membro) e user_b (não-membro)
+    admin2_client.post("/posts", data={"content": "@usuario-a @usuario-b olhem isto", "group_id": str(g["id"])})
+    assert len(user_a_client.get("/notifications").json()) == 1
+    assert user_b_client.get("/notifications").json() == []

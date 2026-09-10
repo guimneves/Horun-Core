@@ -107,12 +107,14 @@ export interface PostReply {
   author_id: number
   author_username: string
   author_display_name: string
+  can_delete: boolean
 }
 
 export interface Post {
   id: number
   content: string
   pinned: boolean
+  group_id: number | null
   created_at: string
   author_id: number
   author_username: string
@@ -120,6 +122,8 @@ export interface Post {
   has_attachment: boolean
   attachment_filename: string
   attachment_content_type: string
+  can_delete: boolean
+  can_pin: boolean
   replies: PostReply[]
 }
 
@@ -293,12 +297,14 @@ export const api = {
   revokeModuleAccess: (moduleId: string, userId: number) =>
     request<{ ok: boolean }>(`/modules/${moduleId}/access/${userId}`, { method: 'DELETE' }),
 
-  listPosts: () => request<Post[]>('/posts'),
-  createPost: async (content: string, file?: File | null) => {
+  listPosts: (groupId?: number | null) =>
+    request<Post[]>(`/posts${groupId ? `?group_id=${groupId}` : ''}`),
+  createPost: async (content: string, file?: File | null, groupId?: number | null) => {
     // multipart — o backend aceita um anexo opcional (imagem ou PDF).
     const form = new FormData()
     form.append('content', content)
     if (file) form.append('file', file)
+    if (groupId) form.append('group_id', String(groupId))
     const res = await fetch(`${API_BASE}/posts`, { method: 'POST', credentials: 'include', body: form })
     if (!res.ok) {
       let message = res.statusText

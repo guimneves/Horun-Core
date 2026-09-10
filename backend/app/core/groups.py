@@ -12,6 +12,11 @@ def member_group_ids(session: Session, user_id: int) -> set[int]:
     return set(rows)
 
 
+def group_member_ids(session: Session, group_id: int) -> set[int]:
+    rows = session.exec(select(GroupMembership.user_id).where(GroupMembership.group_id == group_id)).all()
+    return set(rows)
+
+
 def visible_group_scopes(session: Session, user: User) -> set[int | None]:
     """Escopos de mural/agenda que o usuário pode ver: sempre o do
     laboratório (None) + os grupos dos quais é membro."""

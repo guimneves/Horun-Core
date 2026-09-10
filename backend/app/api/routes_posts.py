@@ -7,12 +7,13 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
-from app.db.models import Notification, Post, PostReply, User
+from app.api.deps import CurrentUser, SessionDep
+from app.core.groups import can_see_group, group_member_ids
+from app.db.models import Group, Notification, Post, PostReply, User
 
 router = APIRouter(tags=["posts"])
 
@@ -29,12 +30,17 @@ _ALLOWED_ATTACHMENT_TYPES = {
 _MENTION_RE = re.compile(r"@([\w.-]+)")
 
 
+def _mural_link(post: Post) -> str:
+    return f"/?g={post.group_id}" if post.group_id else "/"
+
+
 def _fan_out_notifications(
     session: Session, *, content: str, actor: User, post: Post, is_reply: bool
 ) -> None:
     """Cria as notificações de um post/resposta recém-criado: uma por
     pessoa mencionada (@), mais o autor do post quando é uma resposta.
-    Não commita — quem chama commita junto com o post/resposta."""
+    Num mural de grupo, só notifica quem é membro (não faz sentido avisar
+    alguém de um aviso que ele não pode ver). Não commita."""
     recipients: dict[int, str] = {}  # user_id -> kind ("mention" vence "reply")
 
     usernames = set(_MENTION_RE.findall(content))
@@ -47,15 +53,20 @@ def _fan_out_notifications(
     if is_reply and post.author_id != actor.id:
         recipients.setdefault(post.author_id, "reply")
 
+    if post.group_id is not None:
+        members = group_member_ids(session, post.group_id)
+        recipients = {uid: k for uid, k in recipients.items() if uid in members}
+
+    onde_mural = "no mural do grupo" if post.group_id else "no Mural"
     actor_name = actor.display_name or actor.username
     for user_id, kind in recipients.items():
         if kind == "mention":
             onde = "numa resposta" if is_reply else "num aviso"
-            text = f"{actor_name} mencionou você {onde} no Mural"
+            text = f"{actor_name} mencionou você {onde} {onde_mural}"
         else:
-            text = f"{actor_name} respondeu seu aviso no Mural"
+            text = f"{actor_name} respondeu seu aviso {onde_mural}"
         session.add(
-            Notification(user_id=user_id, kind=kind, text=text, link="/", actor_id=actor.id)
+            Notification(user_id=user_id, kind=kind, text=text, link=_mural_link(post), actor_id=actor.id)
         )
 
 
@@ -75,12 +86,14 @@ class ReplyOut(BaseModel):
     author_id: int
     author_username: str
     author_display_name: str
+    can_delete: bool
 
 
 class PostOut(BaseModel):
     id: int
     content: str
     pinned: bool
+    group_id: int | None
     created_at: datetime
     author_id: int
     author_username: str
@@ -88,6 +101,8 @@ class PostOut(BaseModel):
     has_attachment: bool
     attachment_filename: str
     attachment_content_type: str
+    can_delete: bool  # autor, super-admin, ou admin interno do grupo
+    can_pin: bool  # super-admin ou admin interno do grupo (não o autor comum)
     replies: list[ReplyOut]
 
 
@@ -97,7 +112,13 @@ class MentionableUserOut(BaseModel):
     display_name: str
 
 
-def _reply_out(reply: PostReply, author: User) -> ReplyOut:
+def _reply_out(reply: PostReply, author: User, session: Session, viewer: User) -> ReplyOut:
+    post = session.get(Post, reply.post_id)
+    can_delete = (
+        reply.author_id == viewer.id
+        or viewer.is_super_admin
+        or (post is not None and _group_internal_admin_id(session, post.group_id) == viewer.id)
+    )
     return ReplyOut(
         id=reply.id,
         post_id=reply.post_id,
@@ -106,10 +127,28 @@ def _reply_out(reply: PostReply, author: User) -> ReplyOut:
         author_id=author.id,
         author_username=author.username,
         author_display_name=author.display_name or author.username,
+        can_delete=can_delete,
     )
 
 
-def _post_out(post: Post, author: User, session: SessionDep) -> PostOut:
+def _group_internal_admin_id(session: Session, group_id: int | None) -> int | None:
+    if group_id is None:
+        return None
+    g = session.get(Group, group_id)
+    return g.internal_admin_id if g else None
+
+
+def _can_pin_post(session: Session, post: Post, user: User) -> bool:
+    return user.is_super_admin or _group_internal_admin_id(session, post.group_id) == user.id
+
+
+def _can_manage_post(session: Session, post: Post, user: User) -> bool:
+    """Remover: o autor, o super-admin, ou — num mural de grupo — o admin
+    interno do grupo."""
+    return post.author_id == user.id or _can_pin_post(session, post, user)
+
+
+def _post_out(post: Post, author: User, session: SessionDep, viewer: User) -> PostOut:
     replies = session.exec(
         select(PostReply).where(PostReply.post_id == post.id).order_by(PostReply.created_at.asc())
     ).all()
@@ -117,11 +156,12 @@ def _post_out(post: Post, author: User, session: SessionDep) -> PostOut:
     for r in replies:
         reply_author = session.get(User, r.author_id)
         if reply_author is not None:
-            reply_outs.append(_reply_out(r, reply_author))
+            reply_outs.append(_reply_out(r, reply_author, session, viewer))
     return PostOut(
         id=post.id,
         content=post.content,
         pinned=post.pinned,
+        group_id=post.group_id,
         created_at=post.created_at,
         author_id=author.id,
         author_username=author.username,
@@ -129,6 +169,8 @@ def _post_out(post: Post, author: User, session: SessionDep) -> PostOut:
         has_attachment=post.attachment is not None,
         attachment_filename=post.attachment_filename or "",
         attachment_content_type=post.attachment_content_type or "",
+        can_delete=_can_manage_post(session, post, viewer),
+        can_pin=_can_pin_post(session, post, viewer),
         replies=reply_outs,
     )
 
@@ -142,14 +184,30 @@ def list_mentionable_users(_user: CurrentUser, session: SessionDep):
     return [MentionableUserOut(id=u.id, username=u.username, display_name=u.display_name or u.username) for u in users]
 
 
+def _require_group_visible(session: Session, group_id: int, user: User) -> Group:
+    group = session.get(Group, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
+    if not can_see_group(session, group, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Você não faz parte deste grupo")
+    return group
+
+
 @router.get("/posts", response_model=list[PostOut])
-def list_posts(user: CurrentUser, session: SessionDep):
-    posts = session.exec(select(Post).order_by(Post.pinned.desc(), Post.created_at.desc())).all()
+def list_posts(user: CurrentUser, session: SessionDep, group_id: int | None = Query(default=None)):
+    """Sem `group_id` = mural do laboratório (`group_id IS NULL`). Com
+    `group_id` = mural daquele grupo (só se o usuário puder ver)."""
+    if group_id is not None:
+        _require_group_visible(session, group_id, user)
+        q = select(Post).where(Post.group_id == group_id)
+    else:
+        q = select(Post).where(Post.group_id.is_(None))
+    posts = session.exec(q.order_by(Post.pinned.desc(), Post.created_at.desc())).all()
     out = []
     for p in posts:
         author = session.get(User, p.author_id)
         if author is not None:
-            out.append(_post_out(p, author, session))
+            out.append(_post_out(p, author, session, user))
     return out
 
 
@@ -159,14 +217,19 @@ async def create_post(
     session: SessionDep,
     content: str = Form(""),
     file: UploadFile | None = File(None),
+    group_id: int | None = Form(None),
 ):
     """Multipart (não JSON): `content` obrigatório, `file` opcional (imagem
-    ou PDF, até 5 MB) — um anexo por aviso."""
+    ou PDF, até 5 MB), `group_id` opcional (publica no mural do grupo —
+    qualquer membro pode)."""
     content = content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O aviso não pode ficar vazio")
 
-    post = Post(author_id=user.id, content=content)
+    if group_id is not None:
+        _require_group_visible(session, group_id, user)
+
+    post = Post(author_id=user.id, content=content, group_id=group_id)
 
     if file is not None and file.filename:
         if file.content_type not in _ALLOWED_ATTACHMENT_TYPES:
@@ -185,7 +248,7 @@ async def create_post(
     session.refresh(post)
     _fan_out_notifications(session, content=content, actor=user, post=post, is_reply=False)
     session.commit()
-    return _post_out(post, user, session)
+    return _post_out(post, user, session, user)
 
 
 @router.get("/posts/{post_id}/attachment")
@@ -205,17 +268,20 @@ def get_post_attachment(post_id: int, _user: CurrentUser, session: SessionDep):
 
 
 @router.patch("/posts/{post_id}", response_model=PostOut)
-def update_post(post_id: int, payload: UpdatePostRequest, _admin: SuperAdminUser, session: SessionDep):
-    """Fixar/desafixar — só o administrador máximo (seção 6)."""
+def update_post(post_id: int, payload: UpdatePostRequest, user: CurrentUser, session: SessionDep):
+    """Fixar/desafixar — o administrador máximo, ou (num mural de grupo) o
+    admin interno do grupo."""
     post = session.get(Post, post_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aviso não encontrado")
+    if not (user.is_super_admin or _group_internal_admin_id(session, post.group_id) == user.id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para fixar este aviso")
     post.pinned = payload.pinned
     session.add(post)
     session.commit()
     session.refresh(post)
     author = session.get(User, post.author_id)
-    return _post_out(post, author, session)
+    return _post_out(post, author, session, user)
 
 
 @router.delete("/posts/{post_id}")
@@ -223,8 +289,8 @@ def delete_post(post_id: int, user: CurrentUser, session: SessionDep):
     post = session.get(Post, post_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aviso não encontrado")
-    if post.author_id != user.id and not user.is_super_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o autor ou o administrador máximo pode remover")
+    if not _can_manage_post(session, post, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para remover este aviso")
     replies = session.exec(select(PostReply).where(PostReply.post_id == post_id)).all()
     for r in replies:
         session.delete(r)
@@ -238,6 +304,8 @@ def create_reply(post_id: int, payload: CreateReplyRequest, user: CurrentUser, s
     post = session.get(Post, post_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aviso não encontrado")
+    if post.group_id is not None:
+        _require_group_visible(session, post.group_id, user)
     content = payload.content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A resposta não pode ficar vazia")
@@ -247,7 +315,7 @@ def create_reply(post_id: int, payload: CreateReplyRequest, user: CurrentUser, s
     session.refresh(reply)
     _fan_out_notifications(session, content=content, actor=user, post=post, is_reply=True)
     session.commit()
-    return _reply_out(reply, user)
+    return _reply_out(reply, user, session, user)
 
 
 @router.delete("/posts/{post_id}/replies/{reply_id}")
@@ -255,8 +323,12 @@ def delete_reply(post_id: int, reply_id: int, user: CurrentUser, session: Sessio
     reply = session.get(PostReply, reply_id)
     if reply is None or reply.post_id != post_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resposta não encontrada")
-    if reply.author_id != user.id and not user.is_super_admin:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o autor ou o administrador máximo pode remover")
+    post = session.get(Post, post_id)
+    can = reply.author_id == user.id or user.is_super_admin or (
+        post is not None and _group_internal_admin_id(session, post.group_id) == user.id
+    )
+    if not can:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para remover esta resposta")
     session.delete(reply)
     session.commit()
     return {"ok": True}

@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError, API_BASE, type Birthday, type Equipment, type ModuleStatus, type Post, type Reservation } from '../api/client'
+import {
+  api,
+  ApiError,
+  API_BASE,
+  type Birthday,
+  type Equipment,
+  type Group,
+  type ModuleStatus,
+  type Post,
+  type Reservation,
+} from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 import { PinIcon, PaperclipIcon } from '../icons'
@@ -9,7 +19,34 @@ import { MentionTextarea, renderWithMentions } from '../components/MentionTextar
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
 const MAX_ATTACHMENT_MB = 5
 
-function Composer({ onPosted }: { onPosted: () => void }) {
+function ScopeChip({
+  label,
+  color,
+  active,
+  onClick,
+}: {
+  label: string
+  color?: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium"
+      style={{
+        background: active ? 'var(--color-primary)' : 'var(--color-surface)',
+        color: active ? 'var(--color-primary-contrast)' : 'var(--color-text)',
+        border: '1px solid var(--color-border)',
+      }}
+    >
+      {color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />}
+      {label}
+    </button>
+  )
+}
+
+function Composer({ groupId, onPosted }: { groupId: number | null; onPosted: () => void }) {
   const { user } = useAuth()
   const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -33,7 +70,7 @@ function Composer({ onPosted }: { onPosted: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await api.createPost(content.trim(), file)
+      await api.createPost(content.trim(), file, groupId)
       setContent('')
       setFile(null)
       onPosted()
@@ -136,8 +173,7 @@ function PostAttachment({ post }: { post: Post }) {
 }
 
 function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]; postId: number; onChanged: () => void }) {
-  const { user } = useAuth()
-  const canDelete = user?.is_super_admin || user?.id === reply.author_id
+  const canDelete = reply.can_delete
   return (
     <div className="flex gap-2.5">
       <Avatar name={reply.author_display_name} size={26} userId={reply.author_id} />
@@ -229,9 +265,9 @@ function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void })
 }
 
 function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
-  const { user } = useAuth()
-  const canManage = user?.is_super_admin
-  const canDelete = canManage || user?.id === post.author_id
+  // O backend decide (autor, super-admin, ou admin interno do grupo).
+  const canManage = post.can_pin
+  const canDelete = post.can_delete
 
   return (
     <div
@@ -434,24 +470,47 @@ function BirthdaysWidget() {
 export function MuralPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [myGroups, setMyGroups] = useState<Group[]>([])
+  // null = mural do laboratório; número = id do grupo
+  const [scope, setScope] = useState<number | null>(() => {
+    const g = new URLSearchParams(window.location.search).get('g')
+    return g ? Number(g) : null
+  })
+
+  useEffect(() => {
+    api.listGroups().then((gs) => setMyGroups(gs.filter((g) => g.is_member))).catch(() => {})
+  }, [])
 
   function reload() {
+    setError(null)
     api
-      .listPosts()
+      .listPosts(scope)
       .then(setPosts)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar o mural.'))
   }
 
-  useEffect(reload, [])
+  useEffect(reload, [scope])
+
+  const scopeName = scope ? myGroups.find((g) => g.id === scope)?.name ?? 'grupo' : 'Laboratório'
 
   return (
     <div className="flex">
       <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
-        <Composer onPosted={reload} />
+        {myGroups.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <ScopeChip label="🏛 Laboratório" active={scope === null} onClick={() => setScope(null)} />
+            {myGroups.map((g) => (
+              <ScopeChip key={g.id} label={g.name} color={g.color} active={scope === g.id} onClick={() => setScope(g.id)} />
+            ))}
+          </div>
+        )}
+        <Composer groupId={scope} onPosted={reload} />
         {error && <p style={{ color: '#d43b3b' }}>{error}</p>}
         {!posts && !error && <p style={{ color: 'var(--color-text-muted)' }}>Carregando…</p>}
         {posts?.length === 0 && (
-          <p style={{ color: 'var(--color-text-muted)' }}>Nenhum aviso ainda — seja a primeira pessoa a publicar.</p>
+          <p style={{ color: 'var(--color-text-muted)' }}>
+            Nenhum aviso {scope ? `no grupo ${scopeName}` : 'ainda'} — seja a primeira pessoa a publicar.
+          </p>
         )}
         {posts?.map((p) => (
           <PostCard key={p.id} post={p} onChanged={reload} />

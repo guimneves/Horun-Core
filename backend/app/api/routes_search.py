@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import or_, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.groups import visible_group_scopes
 from app.db.models import Equipment, Module, Post, User
 
 router = APIRouter(tags=["search"])
@@ -42,17 +43,18 @@ def search(q: str, user: CurrentUser, session: SessionDep):
     like = f"%{term}%"
     hits: list[SearchHit] = []
 
+    scopes = visible_group_scopes(session, user)  # {None} + grupos do usuário
     posts = session.exec(
-        select(Post).where(Post.content.ilike(like)).order_by(Post.created_at.desc()).limit(_PER_KIND)
+        select(Post).where(Post.content.ilike(like)).order_by(Post.created_at.desc()).limit(_PER_KIND * 3)
     ).all()
-    for p in posts:
+    for p in [p for p in posts if p.group_id in scopes][:_PER_KIND]:
         author = session.get(User, p.author_id)
         hits.append(
             SearchHit(
                 kind="post",
                 title=_snippet(p.content, term),
                 subtitle=f"aviso de {author.display_name or author.username}" if author else "aviso",
-                link="/",
+                link=f"/?g={p.group_id}" if p.group_id else "/",
             )
         )
 
