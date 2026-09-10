@@ -185,8 +185,10 @@ export interface CalendarEvent {
   start_at: string
   end_at: string
   all_day: boolean
+  group_id: number | null
   created_by_id: number
   created_by_name: string
+  can_manage: boolean
 }
 
 export interface Birthday {
@@ -360,10 +362,19 @@ export const api = {
     start_at: string
     end_at: string
     all_day?: boolean
+    group_id?: number | null
   }) => request<CalendarEvent>('/events', { method: 'POST', body: JSON.stringify(payload) }),
   updateEvent: (
     eventId: number,
-    payload: { title: string; description?: string; location?: string; start_at: string; end_at: string; all_day?: boolean },
+    payload: {
+      title: string
+      description?: string
+      location?: string
+      start_at: string
+      end_at: string
+      all_day?: boolean
+      group_id?: number | null
+    },
   ) => request<CalendarEvent>(`/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteEvent: (eventId: number) => request<{ ok: boolean }>(`/events/${eventId}`, { method: 'DELETE' }),
 

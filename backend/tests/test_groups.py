@@ -134,3 +134,37 @@ def test_group_mention_only_notifies_members(super_admin_client, admin2, admin2_
     admin2_client.post("/posts", data={"content": "@usuario-a @usuario-b olhem isto", "group_id": str(g["id"])})
     assert len(user_a_client.get("/notifications").json()) == 1
     assert user_b_client.get("/notifications").json() == []
+
+
+# ── Eventos de grupo (Fase 2c) ─────────────────────────────────────────
+
+_EV = {"start_at": "2026-10-01T14:00:00", "end_at": "2026-10-01T15:00:00"}
+
+
+def test_group_event_only_internal_admin_creates(super_admin_client, admin2, admin2_client, user_a, user_a_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+
+    # membro comum não cria evento do grupo
+    r = user_a_client.post("/events", json={"title": "Reunião", "group_id": g["id"], **_EV})
+    assert r.status_code == 403
+    # admin interno cria
+    r2 = admin2_client.post("/events", json={"title": "Reunião do grupo", "group_id": g["id"], **_EV})
+    assert r2.status_code == 200
+    assert r2.json()["group_id"] == g["id"]
+
+
+def test_group_event_only_visible_to_members(super_admin_client, admin2, admin2_client, user_a, user_a_client, user_b_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    admin2_client.post("/events", json={"title": "Só do grupo", "group_id": g["id"], **_EV})
+
+    assert any(e["title"] == "Só do grupo" for e in user_a_client.get("/events").json())
+    assert not any(e["title"] == "Só do grupo" for e in user_b_client.get("/events").json())
+
+
+def test_super_admin_still_creates_lab_event(super_admin_client, user_a_client):
+    r = super_admin_client.post("/events", json={"title": "Evento do lab", **_EV})
+    assert r.status_code == 200
+    assert r.json()["group_id"] is None
+    assert any(e["title"] == "Evento do lab" for e in user_a_client.get("/events").json())

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, ApiError, type Birthday, type CalendarEvent, type Equipment, type Reservation } from '../api/client'
+import { api, ApiError, type Birthday, type CalendarEvent, type Equipment, type Group, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
 import { toLocalIso } from '../lib/datetime'
@@ -167,11 +167,13 @@ function ReservationPanel({
 function EventPanel({
   initial,
   canEdit,
+  groupId,
   onDone,
   onClose,
 }: {
   initial?: CalendarEvent
   canEdit: boolean
+  groupId?: number | null
   onDone: () => void
   onClose: () => void
 }) {
@@ -201,6 +203,7 @@ function EventPanel({
         all_day: allDay,
         start_at: allDay ? `${date}T00:00:00` : `${date}T${start}:00`,
         end_at: allDay ? `${endDate}T23:59:59` : `${date}T${end}:00`,
+        group_id: editing ? initial!.group_id : groupId ?? null,
       }
       if (editing) await api.updateEvent(initial!.id, body)
       else await api.createEvent(body)
@@ -298,6 +301,8 @@ export function AgendaPage() {
   const [birthdays, setBirthdays] = useState<Birthday[]>([])
   const [panel, setPanel] = useState<Panel>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [myGroups, setMyGroups] = useState<Group[]>([])
+  const [scope, setScope] = useState<number | null>(null) // null = laboratório
   const [hidden, setHidden] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'))
@@ -331,6 +336,16 @@ export function AgendaPage() {
   }
   useEffect(reload, [weekOffset])
 
+  useEffect(() => {
+    api.listGroups().then((gs) => setMyGroups(gs.filter((g) => g.is_member))).catch(() => {})
+  }, [])
+
+  // Reservas de equipamento + aniversários são sempre do laboratório; o
+  // escopo só filtra quais eventos aparecem e onde um novo evento entra.
+  const scopedEvents = events.filter((e) => (scope === null ? e.group_id == null : e.group_id === scope))
+  const groupColor = (gid: number | null) => (gid == null ? 'var(--color-primary)' : myGroups.find((g) => g.id === gid)?.color ?? 'var(--color-primary)')
+  const canCreateEventHere = scope === null ? !!user?.is_super_admin : !!myGroups.find((g) => g.id === scope)?.can_manage
+
   function toggleEquipment(id: string) {
     setHidden((prev) => {
       const next = new Set(prev)
@@ -345,7 +360,7 @@ export function AgendaPage() {
   }
 
   const canEditReservation = (r: Reservation) => r.user_id === user?.id || !!user?.is_super_admin
-  const canEditEvent = () => !!user?.is_super_admin
+  const canEditEvent = (e: CalendarEvent) => e.can_manage
 
   function birthdaysForDay(day: Date) {
     const key = toLocalInputDate(day)
@@ -353,10 +368,10 @@ export function AgendaPage() {
   }
   function allDayEventsForDay(day: Date) {
     const key = toLocalInputDate(day)
-    return events.filter((e) => e.all_day && e.start_at.slice(0, 10) <= key && e.end_at.slice(0, 10) >= key)
+    return scopedEvents.filter((e) => e.all_day && e.start_at.slice(0, 10) <= key && e.end_at.slice(0, 10) >= key)
   }
   function timedEventsForDay(day: Date) {
-    return events.filter((e) => !e.all_day && isSameDay(new Date(e.start_at), day))
+    return scopedEvents.filter((e) => !e.all_day && isSameDay(new Date(e.start_at), day))
   }
 
   // ── Arrastar / redimensionar ────────────────────────────────────────
@@ -381,7 +396,10 @@ export function AgendaPage() {
 
   function onDragMove(e: React.PointerEvent) {
     if (!drag) return
-    const editable = drag.kind === 'r' ? canEditReservation(reservations.find((r) => r.id === drag.id)!) : canEditEvent()
+    const editable =
+      drag.kind === 'r'
+        ? canEditReservation(reservations.find((r) => r.id === drag.id)!)
+        : canEditEvent(events.find((e) => e.id === drag.id)!)
     if (!editable) return
     const gridEl = gridRef.current
     if (!gridEl) return
@@ -439,6 +457,7 @@ export function AgendaPage() {
           title: ev.title,
           location: ev.location,
           all_day: false,
+          group_id: ev.group_id,
           start_at: toLocalIso(newStart),
           end_at: toLocalIso(newEnd),
         })
@@ -468,9 +487,22 @@ export function AgendaPage() {
               <ChevronRightIcon />
             </button>
             <span className="text-base font-semibold capitalize">{rangeLabel}</span>
+            {myGroups.length > 0 && (
+              <select
+                className="rounded-lg px-2.5 py-1.5 text-[13px] outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+                value={scope ?? ''}
+                onChange={(e) => setScope(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">🏛 Laboratório</option>
+                {myGroups.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {user?.is_super_admin && (
+            {canCreateEventHere && (
               <button onClick={() => setPanel({ kind: 'new-event' })} className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--color-border)' }}>
                 <PlusIcon />
                 Novo evento
@@ -551,7 +583,7 @@ export function AgendaPage() {
                         sFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
                         eFrac = en.getHours() + en.getMinutes() / 60 - START_HOUR
                       }
-                      const editable = canEditEvent()
+                      const editable = canEditEvent(e)
                       return (
                         <div
                           key={`ev${e.id}`}
@@ -564,7 +596,7 @@ export function AgendaPage() {
                             top: sFrac * ROW_HEIGHT + 2,
                             height: Math.max((eFrac - sFrac) * ROW_HEIGHT - 4, 20),
                             background: 'var(--color-bg-elevated)',
-                            borderLeft: '3px solid var(--color-primary)',
+                            borderLeft: `3px solid ${groupColor(e.group_id)}`,
                             boxShadow: dragging ? '0 4px 14px rgba(0,0,0,0.35)' : 'inset 0 0 0 1px var(--color-border)',
                             cursor: editable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
                             touchAction: 'none',
@@ -640,9 +672,9 @@ export function AgendaPage() {
         {panel?.kind === 'reservation' && (
           <ReservationPanel equipment={equipment} initial={panel.data} canEdit={canEditReservation(panel.data)} onDone={reload} onClose={() => setPanel(null)} />
         )}
-        {panel?.kind === 'new-event' && <EventPanel canEdit onDone={reload} onClose={() => setPanel(null)} />}
+        {panel?.kind === 'new-event' && <EventPanel canEdit groupId={scope} onDone={reload} onClose={() => setPanel(null)} />}
         {panel?.kind === 'event' && (
-          <EventPanel initial={panel.data} canEdit={canEditEvent()} onDone={reload} onClose={() => setPanel(null)} />
+          <EventPanel initial={panel.data} canEdit={canEditEvent(panel.data)} onDone={reload} onClose={() => setPanel(null)} />
         )}
 
         {panel === null && (
