@@ -44,12 +44,20 @@ export interface CurrentUser {
   phone: string
   position: string
   qualification: string
+  birth_day: number | null
+  birth_month: number | null
+  birth_year: number | null
   has_photo: boolean
   is_super_admin: boolean
   is_protected: boolean
   onboarded: boolean
   setup_code: string | null
 }
+
+export const MONTHS_PT = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+]
 
 // Mesmas listas de app/db/models.py (POSITIONS/QUALIFICATIONS) — a
 // validação de verdade é sempre no backend, isto é só pra montar os
@@ -165,6 +173,27 @@ export interface Reservation {
   user_display_name: string
 }
 
+export interface CalendarEvent {
+  id: number
+  title: string
+  description: string
+  location: string
+  start_at: string
+  end_at: string
+  all_day: boolean
+  created_by_id: number
+  created_by_name: string
+}
+
+export interface Birthday {
+  user_id: number
+  name: string
+  has_photo: boolean
+  date: string // "YYYY-MM-DD" — a ocorrência dentro do intervalo pedido
+  day: number
+  month: number
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
@@ -181,6 +210,10 @@ export const api = {
     email?: string
     phone?: string
     onboarded?: boolean
+    birth_set?: boolean
+    birth_day?: number | null
+    birth_month?: number | null
+    birth_year?: number | null
   }) => request<CurrentUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
   uploadMyPhoto: async (file: File) => {
     const form = new FormData()
@@ -282,4 +315,23 @@ export const api = {
     request<Reservation>(`/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteReservation: (reservationId: number) =>
     request<{ ok: boolean }>(`/reservations/${reservationId}`, { method: 'DELETE' }),
+
+  listEvents: (range?: { start: string; end: string }) =>
+    request<CalendarEvent[]>(`/events${range ? `?start=${range.start}&end=${range.end}` : ''}`),
+  createEvent: (payload: {
+    title: string
+    description?: string
+    location?: string
+    start_at: string
+    end_at: string
+    all_day?: boolean
+  }) => request<CalendarEvent>('/events', { method: 'POST', body: JSON.stringify(payload) }),
+  updateEvent: (
+    eventId: number,
+    payload: { title: string; description?: string; location?: string; start_at: string; end_at: string; all_day?: boolean },
+  ) => request<CalendarEvent>(`/events/${eventId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteEvent: (eventId: number) => request<{ ok: boolean }>(`/events/${eventId}`, { method: 'DELETE' }),
+
+  listBirthdays: (range: { start: string; end: string }) =>
+    request<Birthday[]>(`/users/birthdays?start=${range.start}&end=${range.end}`),
 }

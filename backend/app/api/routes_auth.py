@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Response, UploadFile, status
+import calendar
+from datetime import date
+
+from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, field_validator
 from sqlmodel import select
 
@@ -26,6 +29,22 @@ def _validate_choice(value: str, allowed: list[str], field_name: str) -> str:
     return value
 
 
+def _validate_birth(day: int | None, month: int | None, year: int | None) -> None:
+    """Dia e mês andam juntos (ou os dois em branco). Ano é opcional. 29/02
+    é aceito (o modelo guarda a data "de nascimento", não uma data real de
+    um ano específico)."""
+    if (day is None) != (month is None):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe dia e mês juntos (ou deixe os dois em branco).")
+    if month is not None:
+        if not 1 <= month <= 12:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Mês inválido.")
+        max_day = 29 if month == 2 else calendar.monthrange(2000, month)[1]
+        if not 1 <= day <= max_day:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Dia inválido para o mês escolhido.")
+    if year is not None and not 1900 <= year <= date.today().year:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ano de nascimento inválido.")
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -46,6 +65,9 @@ class UserOut(BaseModel):
     phone: str
     position: str
     qualification: str
+    birth_day: int | None
+    birth_month: int | None
+    birth_year: int | None
     has_photo: bool
     is_super_admin: bool
     is_protected: bool
@@ -102,6 +124,13 @@ class UpdateProfileRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     onboarded: bool | None = None
+    # Trio de nascimento: quando `birth_set` vem True, os três valores
+    # abaixo (day/month obrigatórios, year opcional) substituem o que
+    # havia; quando vem False, limpa. Quando vem None (default), não mexe.
+    birth_set: bool | None = None
+    birth_day: int | None = None
+    birth_month: int | None = None
+    birth_year: int | None = None
 
 
 def _out(user: User) -> UserOut:
@@ -118,6 +147,9 @@ def _out(user: User) -> UserOut:
         phone=user.phone or "",
         position=user.position or "",
         qualification=user.qualification or "",
+        birth_day=user.birth_day,
+        birth_month=user.birth_month,
+        birth_year=user.birth_year,
         has_photo=user.photo is not None,
         is_super_admin=user.is_super_admin,
         is_protected=user.is_protected,
@@ -199,6 +231,13 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
         user.phone = payload.phone
     if payload.onboarded is not None:
         user.onboarded = payload.onboarded
+    if payload.birth_set is True:
+        _validate_birth(payload.birth_day, payload.birth_month, payload.birth_year)
+        user.birth_day = payload.birth_day
+        user.birth_month = payload.birth_month
+        user.birth_year = payload.birth_year
+    elif payload.birth_set is False:
+        user.birth_day = user.birth_month = user.birth_year = None
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -303,6 +342,54 @@ def users_directory(current: CurrentUser, session: SessionDep):
         )
         for u in users
     ]
+
+
+class BirthdayOut(BaseModel):
+    user_id: int
+    name: str
+    has_photo: bool
+    date: date  # a ocorrência dentro do intervalo pedido (ano do calendário)
+    day: int
+    month: int
+
+
+def _birthday_on(year: int, month: int, day: int) -> date:
+    try:
+        return date(year, month, day)
+    except ValueError:
+        # 29/02 em ano não bissexto — mostra em 28/02
+        return date(year, 2, 28)
+
+
+@router.get("/users/birthdays", response_model=list[BirthdayOut])
+def users_birthdays(
+    _user: CurrentUser,
+    session: SessionDep,
+    start: date = Query(...),
+    end: date = Query(...),
+):
+    """Aniversários que caem no intervalo [start, end] — projeção dos
+    perfis, sem tabela. A Agenda pede a semana; o widget do Mural, os
+    próximos dias."""
+    out: list[BirthdayOut] = []
+    for u in session.exec(select(User)).all():
+        if not u.birth_day or not u.birth_month:
+            continue
+        for year in range(start.year, end.year + 1):
+            occ = _birthday_on(year, u.birth_month, u.birth_day)
+            if start <= occ <= end:
+                out.append(
+                    BirthdayOut(
+                        user_id=u.id,
+                        name=u.full_name or u.display_name or u.username,
+                        has_photo=u.photo is not None,
+                        date=occ,
+                        day=u.birth_day,
+                        month=u.birth_month,
+                    )
+                )
+    out.sort(key=lambda b: b.date)
+    return out
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)

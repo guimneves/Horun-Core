@@ -174,6 +174,74 @@ def test_user_marks_onboarding_done(user_a_client):
     assert user_a_client.get("/auth/me").json()["onboarded"] is True
 
 
+def test_user_sets_birth_date_day_month_only(user_a_client):
+    r = user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 15, "birth_month": 9})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["birth_day"] == 15 and body["birth_month"] == 9 and body["birth_year"] is None
+
+
+def test_user_sets_birth_date_with_year(user_a_client):
+    r = user_a_client.patch(
+        "/auth/me", json={"birth_set": True, "birth_day": 1, "birth_month": 1, "birth_year": 1990}
+    )
+    assert r.status_code == 200
+    assert r.json()["birth_year"] == 1990
+
+
+def test_leap_day_birthday_accepted(user_a_client):
+    r = user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 29, "birth_month": 2})
+    assert r.status_code == 200
+    assert r.json()["birth_day"] == 29
+
+
+def test_day_without_month_rejected(user_a_client):
+    r = user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 10})
+    assert r.status_code == 400
+
+
+def test_invalid_day_for_month_rejected(user_a_client):
+    r = user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 31, "birth_month": 4})
+    assert r.status_code == 400
+
+
+def test_future_birth_year_rejected(user_a_client):
+    r = user_a_client.patch(
+        "/auth/me", json={"birth_set": True, "birth_day": 1, "birth_month": 1, "birth_year": 2999}
+    )
+    assert r.status_code == 400
+
+
+def test_clear_birth_date(user_a_client):
+    user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 5, "birth_month": 5})
+    r = user_a_client.patch("/auth/me", json={"birth_set": False})
+    assert r.status_code == 200
+    assert r.json()["birth_day"] is None and r.json()["birth_month"] is None
+
+
+def test_birthdays_endpoint_projects_into_range(user_a_client, user_b_client):
+    user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 20, "birth_month": 6, "full_name": "Ana"})
+    user_b_client.patch("/auth/me", json={"birth_set": True, "birth_day": 5, "birth_month": 12, "full_name": "Bia"})
+
+    r = user_a_client.get("/users/birthdays?start=2026-06-01&end=2026-06-30")
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "Ana"
+    assert body[0]["date"] == "2026-06-20"
+
+
+def test_birthdays_endpoint_spans_year_boundary(user_a_client):
+    user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 2, "birth_month": 1})
+    r = user_a_client.get("/users/birthdays?start=2026-12-20&end=2027-01-10")
+    assert [b["date"] for b in r.json()] == ["2027-01-02"]
+
+
+def test_leap_day_birthday_shows_on_feb28_in_common_year(user_a_client):
+    user_a_client.patch("/auth/me", json={"birth_set": True, "birth_day": 29, "birth_month": 2})
+    r = user_a_client.get("/users/birthdays?start=2027-02-01&end=2027-03-01")  # 2027 não é bissexto
+    assert [b["date"] for b in r.json()] == ["2027-02-28"]
+
+
 def test_out_coerces_null_legacy_columns():
     """Conta criada antes das colunas de perfil existirem fica com NULL no
     Postgres (a coluna migrada é nullable, ao contrário de uma instalação

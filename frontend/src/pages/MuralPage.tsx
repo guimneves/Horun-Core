@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, ApiError, API_BASE, type Equipment, type ModuleStatus, type Post, type Reservation } from '../api/client'
+import { api, ApiError, API_BASE, type Birthday, type Equipment, type ModuleStatus, type Post, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 import { PinIcon, PaperclipIcon } from '../icons'
@@ -398,6 +398,39 @@ function AgendaWidget() {
   )
 }
 
+function BirthdaysWidget() {
+  const [items, setItems] = useState<Birthday[]>([])
+
+  useEffect(() => {
+    const start = new Date()
+    const end = new Date()
+    end.setDate(end.getDate() + 45)
+    const iso = (d: Date) => toLocalIso(d).slice(0, 10)
+    api.listBirthdays({ start: iso(start), end: iso(end) }).then(setItems).catch(() => {})
+  }, [])
+
+  if (items.length === 0) return null
+
+  return (
+    <div>
+      <div className="mb-3 text-[12.5px] font-semibold uppercase" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.04em' }}>
+        Próximos aniversários
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {items.slice(0, 8).map((b) => (
+          <div key={`${b.user_id}-${b.date}`} className="flex items-center gap-2.5">
+            <Avatar name={b.name} size={26} userId={b.user_id} />
+            <span className="flex-1 truncate text-[13px]">{b.name}</span>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              {b.day}/{b.month}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function MuralPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -429,6 +462,7 @@ export function MuralPage() {
         <div className="flex flex-col gap-6">
           <ModulesWidget />
           <AgendaWidget />
+          <BirthdaysWidget />
         </div>
       </div>
     </div>

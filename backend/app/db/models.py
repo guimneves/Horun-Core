@@ -63,6 +63,12 @@ class User(SQLModel, table=True):
     # definido) — atribuído pelo administrador máximo, não autoatendido.
     position: str = ""
     qualification: str = ""
+    # Data de nascimento em partes — dia e mês andam juntos (ou os dois
+    # nulos), ano é opcional (privacidade). O calendário só usa dia+mês;
+    # guardar separado evita o vaivém de `date` nullable com info parcial.
+    birth_day: Optional[int] = None
+    birth_month: Optional[int] = None
+    birth_year: Optional[int] = None
     # Foto de perfil — guardada no próprio banco (bytes), não em disco:
     # time pequeno, evita depender de um volume/servidor de arquivos
     # separado. Nunca incluída nas respostas normais de usuário (ver
@@ -149,6 +155,24 @@ class Notification(SQLModel, table=True):
     link: str = "/"  # pra onde levar ao clicar
     actor_id: Optional[int] = Field(default=None, foreign_key="user.id")  # quem disparou
     read: bool = Field(default=False, index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Event(SQLModel, table=True):
+    """Evento no calendário do laboratório — reunião, seminário, feriado,
+    prazo. Diferente de `Reservation` (que é "equipamento ocupado, sem
+    sobreposição"): evento não tem regra de conflito e pode ser de dia
+    inteiro. Na Fase 1 só o administrador máximo cria e todo mundo vê;
+    escopo de grupo (`group_id`) entra na Fase 2."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    description: str = ""
+    location: str = ""
+    start_at: datetime
+    end_at: datetime
+    all_day: bool = Field(default=False)
+    created_by_id: int = Field(foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
 
 

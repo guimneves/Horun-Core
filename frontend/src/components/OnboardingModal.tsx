@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from './Avatar'
+import { BirthDateFields, birthPayload, type BirthValue } from './BirthDateFields'
 
 // Aparece uma vez, no primeiro acesso (User.onboarded === false), pra a
 // pessoa completar o perfil — assim o Diretório de Colaboradores não
@@ -13,6 +14,11 @@ export function OnboardingModal() {
   const [fullName, setFullName] = useState(user?.full_name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [phone, setPhone] = useState(user?.phone ?? '')
+  const [birth, setBirth] = useState<BirthValue>({
+    day: user?.birth_day ?? null,
+    month: user?.birth_month ?? null,
+    year: user?.birth_year ?? null,
+  })
   const [busy, setBusy] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,13 +43,25 @@ export function OnboardingModal() {
 
   async function finish(save: boolean) {
     setError(null)
+    if (save) {
+      const birthBody = birthPayload(birth)
+      if (birthBody === null) {
+        setError('Escolha o dia e o mês de nascimento juntos (ou deixe os dois em branco).')
+        return
+      }
+      setBusy(true)
+      try {
+        await api.updateProfile({ full_name: fullName, email, phone, onboarded: true, ...birthBody })
+        await refreshUser()
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : 'Não foi possível salvar.')
+        setBusy(false)
+      }
+      return
+    }
     setBusy(true)
     try {
-      await api.updateProfile(
-        save
-          ? { full_name: fullName, email, phone, onboarded: true }
-          : { onboarded: true },
-      )
+      await api.updateProfile({ onboarded: true })
       await refreshUser()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Não foi possível salvar.')
@@ -99,6 +117,10 @@ export function OnboardingModal() {
             />
           </div>
         ))}
+
+        <div className="mb-3">
+          <BirthDateFields value={birth} onChange={setBirth} />
+        </div>
 
         {error && (
           <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>

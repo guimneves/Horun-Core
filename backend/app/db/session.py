@@ -67,6 +67,9 @@ def _run_migrations() -> None:
     _ensure_column("user", "photo", blob)
     _ensure_column("user", "photo_content_type", "VARCHAR")
     _ensure_column("user", "setup_code", "VARCHAR")
+    _ensure_column("user", "birth_day", "INTEGER")
+    _ensure_column("user", "birth_month", "INTEGER")
+    _ensure_column("user", "birth_year", "INTEGER")
     _backfill_null_text("user", _USER_TEXT_COLUMNS)
     # DEFAULT TRUE: as contas que já existiam quando a coluna foi criada
     # não passam pelo onboarding (só as criadas depois, que nascem False

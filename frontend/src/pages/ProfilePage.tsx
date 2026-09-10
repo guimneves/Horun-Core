@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
+import { BirthDateFields, birthPayload, type BirthValue } from '../components/BirthDateFields'
 
 function Field({
   label,
@@ -39,6 +40,11 @@ export function ProfilePage() {
   const [fullName, setFullName] = useState(user?.full_name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [phone, setPhone] = useState(user?.phone ?? '')
+  const [birth, setBirth] = useState<BirthValue>({
+    day: user?.birth_day ?? null,
+    month: user?.birth_month ?? null,
+    year: user?.birth_year ?? null,
+  })
 
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -50,9 +56,14 @@ export function ProfilePage() {
   async function handleSave(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    const birthBody = birthPayload(birth)
+    if (birthBody === null) {
+      setError('Escolha o dia e o mês de nascimento juntos (ou deixe os dois em branco).')
+      return
+    }
     setSaving(true)
     try {
-      await api.updateProfile({ display_name: displayName, full_name: fullName, email, phone })
+      await api.updateProfile({ display_name: displayName, full_name: fullName, email, phone, ...birthBody })
       await refreshUser()
       setSavedAt(Date.now())
     } catch (err) {
@@ -142,6 +153,10 @@ export function ProfilePage() {
         <Field label="Nome completo" value={fullName} onChange={setFullName} placeholder="ex.: Ana Paula Souza Lima" />
         <Field label="E-mail" type="email" value={email} onChange={setEmail} placeholder="voce@nqtr.ufrj.br" />
         <Field label="Telefone" value={phone} onChange={setPhone} placeholder="(21) 99999-0000" />
+
+        <div className="mb-4">
+          <BirthDateFields value={birth} onChange={setBirth} />
+        </div>
 
         <div className="mb-4 grid grid-cols-2 gap-4">
           <div>
