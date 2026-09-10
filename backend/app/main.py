@@ -15,6 +15,7 @@ from app.api import (
     routes_posts,
     routes_proxy,
     routes_reservations,
+    routes_search,
 )
 from app.core.security import hash_password
 from app.db.models import User
@@ -47,6 +48,7 @@ app.include_router(routes_posts.router)
 app.include_router(routes_notifications.router)
 app.include_router(routes_equipment.router)
 app.include_router(routes_reservations.router)
+app.include_router(routes_search.router)
 app.include_router(routes_proxy.router)
 
 

@@ -45,6 +45,10 @@ def _run_migrations() -> None:
     _ensure_column("user", "photo", "BYTEA" if engine.dialect.name == "postgresql" else "BLOB")
     _ensure_column("user", "photo_content_type", "VARCHAR")
     _ensure_column("user", "setup_code", "VARCHAR")
+    # DEFAULT TRUE: as contas que já existiam quando a coluna foi criada
+    # não passam pelo onboarding (só as criadas depois, que nascem False
+    # pelo default do modelo Python).
+    _ensure_column("user", "onboarded", "BOOLEAN DEFAULT TRUE")
 
     # password_hash era obrigatório (NOT NULL) — agora uma conta pode
     # nascer sem senha (seção "Criação sem senha"). SQLite não suporta
@@ -52,6 +56,11 @@ def _run_migrations() -> None:
     # SQLite novo já nasce certo a partir do modelo atual (create_all),
     # dev sempre recria o arquivo do zero. Só Postgres, com dado real já
     # gravado antes dessa mudança, precisa do ALTER de verdade.
+    _blob = "BYTEA" if engine.dialect.name == "postgresql" else "BLOB"
+    _ensure_column("post", "attachment", _blob)
+    _ensure_column("post", "attachment_content_type", "VARCHAR")
+    _ensure_column("post", "attachment_filename", "VARCHAR")
+
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
             conn.exec_driver_sql('ALTER TABLE "user" ALTER COLUMN password_hash DROP NOT NULL')

@@ -1,23 +1,44 @@
-import { useEffect, useState } from 'react'
-import { api, ApiError, type Equipment, type ModuleStatus, type Post, type Reservation } from '../api/client'
+import { useEffect, useRef, useState } from 'react'
+import { api, ApiError, API_BASE, type Equipment, type ModuleStatus, type Post, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
-import { PinIcon } from '../icons'
+import { PinIcon, PaperclipIcon } from '../icons'
 import { timeAgo, toLocalIso } from '../lib/datetime'
 import { MentionTextarea, renderWithMentions } from '../components/MentionTextarea'
+
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
+const MAX_ATTACHMENT_MB = 5
 
 function Composer({ onPosted }: { onPosted: () => void }) {
   const { user } = useAuth()
   const [content, setContent] = useState('')
+  const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null
+    e.target.value = ''
+    setError(null)
+    if (f && f.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+      setError(`Anexo grande demais (máximo ${MAX_ATTACHMENT_MB} MB)`)
+      return
+    }
+    setFile(f)
+  }
 
   async function handlePost() {
     if (!content.trim()) return
     setBusy(true)
+    setError(null)
     try {
-      await api.createPost(content.trim())
+      await api.createPost(content.trim(), file)
       setContent('')
+      setFile(null)
       onPosted()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível publicar.')
     } finally {
       setBusy(false)
     }
@@ -38,18 +59,79 @@ function Composer({ onPosted }: { onPosted: () => void }) {
           className="mb-2.5 w-full resize-none rounded-[10px] px-3.5 py-2.5 text-sm outline-none"
           style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
         />
-        <div className="flex justify-end">
+
+        {file && (
+          <div
+            className="mb-2.5 flex items-center gap-2 rounded-lg px-3 py-2 text-[12.5px]"
+            style={{ background: 'var(--color-surface)' }}
+          >
+            <PaperclipIcon style={{ color: 'var(--color-text-muted)' }} />
+            <span className="truncate">{file.name}</span>
+            <button className="ml-auto" style={{ color: 'var(--color-text-muted)' }} onClick={() => setFile(null)}>
+              remover
+            </button>
+          </div>
+        )}
+        {error && (
+          <p className="mb-2 text-xs" style={{ color: '#d43b3b' }}>
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-1.5 text-[12.5px]"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            <PaperclipIcon />
+            Anexar imagem ou PDF
+          </button>
+          <input ref={fileRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={pickFile} />
           <button
             onClick={handlePost}
             disabled={busy || !content.trim()}
             className="rounded-lg px-4.5 py-2 text-[13px] font-semibold disabled:opacity-50"
             style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
           >
-            Publicar
+            {busy ? 'Publicando…' : 'Publicar'}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function PostAttachment({ post }: { post: Post }) {
+  if (!post.has_attachment) return null
+  const url = `${API_BASE}/posts/${post.id}/attachment`
+  const isImage = post.attachment_content_type.startsWith('image/')
+
+  if (isImage) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="mt-2.5 block">
+        <img
+          src={url}
+          alt={post.attachment_filename}
+          crossOrigin="use-credentials"
+          className="max-h-80 rounded-lg border"
+          style={{ borderColor: 'var(--color-border)', objectFit: 'contain' }}
+        />
+      </a>
+    )
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-2.5 flex items-center gap-2 rounded-lg border px-3 py-2 text-[13px]"
+      style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+    >
+      <PaperclipIcon style={{ color: 'var(--color-text-muted)' }} />
+      <span className="truncate">{post.attachment_filename || 'anexo'}</span>
+    </a>
   )
 }
 
@@ -202,6 +284,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
             )}
           </div>
           <p className="mt-1.5 text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
+          <PostAttachment post={post} />
         </div>
       </div>
       <ReplyThread post={post} onChanged={onChanged} />

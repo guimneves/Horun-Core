@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -15,6 +15,14 @@ from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
 from app.db.models import Notification, Post, PostReply, User
 
 router = APIRouter(tags=["posts"])
+
+_MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB
+_ALLOWED_ATTACHMENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
 
 # Mesma forma que o frontend reconhece/destaca (MentionTextarea.tsx):
 # "@" seguido de letras, números, ponto ou hífen.
@@ -51,10 +59,6 @@ def _fan_out_notifications(
         )
 
 
-class CreatePostRequest(BaseModel):
-    content: str
-
-
 class CreateReplyRequest(BaseModel):
     content: str
 
@@ -81,6 +85,9 @@ class PostOut(BaseModel):
     author_id: int
     author_username: str
     author_display_name: str
+    has_attachment: bool
+    attachment_filename: str
+    attachment_content_type: str
     replies: list[ReplyOut]
 
 
@@ -119,6 +126,9 @@ def _post_out(post: Post, author: User, session: SessionDep) -> PostOut:
         author_id=author.id,
         author_username=author.username,
         author_display_name=author.display_name or author.username,
+        has_attachment=post.attachment is not None,
+        attachment_filename=post.attachment_filename or "",
+        attachment_content_type=post.attachment_content_type or "",
         replies=reply_outs,
     )
 
@@ -144,17 +154,54 @@ def list_posts(user: CurrentUser, session: SessionDep):
 
 
 @router.post("/posts", response_model=PostOut)
-def create_post(payload: CreatePostRequest, user: CurrentUser, session: SessionDep):
-    content = payload.content.strip()
+async def create_post(
+    user: CurrentUser,
+    session: SessionDep,
+    content: str = Form(""),
+    file: UploadFile | None = File(None),
+):
+    """Multipart (não JSON): `content` obrigatório, `file` opcional (imagem
+    ou PDF, até 5 MB) — um anexo por aviso."""
+    content = content.strip()
     if not content:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O aviso não pode ficar vazio")
+
     post = Post(author_id=user.id, content=content)
+
+    if file is not None and file.filename:
+        if file.content_type not in _ALLOWED_ATTACHMENT_TYPES:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Anexo não suportado (use imagem JPEG/PNG/WEBP ou PDF)"
+            )
+        data = await file.read()
+        if len(data) > _MAX_ATTACHMENT_BYTES:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Anexo grande demais (máximo 5 MB)")
+        post.attachment = data
+        post.attachment_content_type = file.content_type
+        post.attachment_filename = file.filename
+
     session.add(post)
     session.commit()
     session.refresh(post)
     _fan_out_notifications(session, content=content, actor=user, post=post, is_reply=False)
     session.commit()
     return _post_out(post, user, session)
+
+
+@router.get("/posts/{post_id}/attachment")
+def get_post_attachment(post_id: int, _user: CurrentUser, session: SessionDep):
+    post = session.get(Post, post_id)
+    if post is None or post.attachment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sem anexo")
+    headers = {}
+    if post.attachment_filename:
+        # inline: imagem abre na aba, PDF idem — o nome fica pro "salvar como"
+        headers["Content-Disposition"] = f'inline; filename="{post.attachment_filename}"'
+    return Response(
+        content=post.attachment,
+        media_type=post.attachment_content_type or "application/octet-stream",
+        headers=headers,
+    )
 
 
 @router.patch("/posts/{post_id}", response_model=PostOut)

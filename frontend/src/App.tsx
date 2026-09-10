@@ -12,7 +12,9 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ColaboradoresPage } from './pages/ColaboradoresPage'
 import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
-import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon, PeopleIcon } from './icons'
+import { OnboardingModal } from './components/OnboardingModal'
+import { GlobalSearch } from './components/GlobalSearch'
+import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon } from './icons'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
 
@@ -127,15 +129,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           Horun
         </Link>
 
-        <div
-          className="flex w-[380px] items-center gap-2.5 rounded-full px-3.5 py-2"
-          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-        >
-          <SearchIcon style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          <span className="text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
-            Buscar amostras, reagentes, avisos…
-          </span>
-        </div>
+        <GlobalSearch />
 
         <div className="flex items-center gap-4">
           <NotificationsBell />
@@ -158,6 +152,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="flex-shrink-0">
         <HorunFooter moduleName="Core" />
       </div>
+
+      <OnboardingModal />
     </div>
   )
 }

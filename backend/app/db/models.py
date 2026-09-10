@@ -74,6 +74,10 @@ class User(SQLModel, table=True):
     # Conta de bootstrap protegida — mesmo raciocínio do RE7S (ver
     # app/api/routes_auth.py): sempre precisa existir um acesso de backup.
     is_protected: bool = Field(default=False)
+    # False = ainda não passou pelo "complete seu perfil" do primeiro
+    # acesso. A migração marca as contas já existentes como True (não
+    # incomodar quem já usa); contas novas nascem False.
+    onboarded: bool = Field(default=False)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -111,6 +115,13 @@ class Post(SQLModel, table=True):
     author_id: int = Field(foreign_key="user.id", index=True)
     content: str
     pinned: bool = Field(default=False)
+    # Um anexo opcional por aviso (imagem ou PDF) — guardado no banco, mesmo
+    # raciocínio da foto de perfil (evita depender de volume/servidor de
+    # arquivos). Servido só por GET /posts/{id}/attachment, nunca embutido
+    # na listagem.
+    attachment: Optional[bytes] = None
+    attachment_content_type: Optional[str] = None
+    attachment_filename: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

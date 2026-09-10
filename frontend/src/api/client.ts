@@ -47,6 +47,7 @@ export interface CurrentUser {
   has_photo: boolean
   is_super_admin: boolean
   is_protected: boolean
+  onboarded: boolean
   setup_code: string | null
 }
 
@@ -108,6 +109,9 @@ export interface Post {
   author_id: number
   author_username: string
   author_display_name: string
+  has_attachment: boolean
+  attachment_filename: string
+  attachment_content_type: string
   replies: PostReply[]
 }
 
@@ -115,6 +119,13 @@ export interface MentionableUser {
   id: number
   username: string
   display_name: string
+}
+
+export interface SearchHit {
+  kind: 'post' | 'equipment' | 'module' | 'person' | string
+  title: string
+  subtitle: string
+  link: string
 }
 
 export interface DirectoryEntry {
@@ -164,8 +175,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ username, setup_code: setupCode, new_password: newPassword }),
     }),
-  updateProfile: (payload: { display_name?: string; full_name?: string; email?: string; phone?: string }) =>
-    request<CurrentUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+  updateProfile: (payload: {
+    display_name?: string
+    full_name?: string
+    email?: string
+    phone?: string
+    onboarded?: boolean
+  }) => request<CurrentUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
   uploadMyPhoto: async (file: File) => {
     const form = new FormData()
     form.append('file', file)
@@ -218,7 +234,23 @@ export const api = {
     request<{ ok: boolean }>(`/modules/${moduleId}/access/${userId}`, { method: 'DELETE' }),
 
   listPosts: () => request<Post[]>('/posts'),
-  createPost: (content: string) => request<Post>('/posts', { method: 'POST', body: JSON.stringify({ content }) }),
+  createPost: async (content: string, file?: File | null) => {
+    // multipart — o backend aceita um anexo opcional (imagem ou PDF).
+    const form = new FormData()
+    form.append('content', content)
+    if (file) form.append('file', file)
+    const res = await fetch(`${API_BASE}/posts`, { method: 'POST', credentials: 'include', body: form })
+    if (!res.ok) {
+      let message = res.statusText
+      try {
+        message = (await res.json()).detail ?? message
+      } catch {
+        // corpo sem JSON — mantém statusText
+      }
+      throw new ApiError(res.status, message)
+    }
+    return res.json() as Promise<Post>
+  },
   pinPost: (postId: number, pinned: boolean) =>
     request<Post>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
   deletePost: (postId: number) => request<{ ok: boolean }>(`/posts/${postId}`, { method: 'DELETE' }),
@@ -229,6 +261,8 @@ export const api = {
     request<{ ok: boolean }>(`/posts/${postId}/replies/${replyId}`, { method: 'DELETE' }),
 
   listMentionableUsers: () => request<MentionableUser[]>('/users/mentionable'),
+
+  search: (q: string) => request<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`),
 
   listNotifications: () => request<Notification[]>('/notifications'),
   unreadNotificationCount: () => request<{ count: number }>('/notifications/unread-count'),

@@ -49,6 +49,7 @@ class UserOut(BaseModel):
     has_photo: bool
     is_super_admin: bool
     is_protected: bool
+    onboarded: bool
     # Só tem valor de verdade logo após a criação (ou depois de
     # regenerado) — None assim que a pessoa define a própria senha.
     setup_code: str | None
@@ -100,6 +101,7 @@ class UpdateProfileRequest(BaseModel):
     full_name: str | None = None
     email: str | None = None
     phone: str | None = None
+    onboarded: bool | None = None
 
 
 def _out(user: User) -> UserOut:
@@ -115,6 +117,7 @@ def _out(user: User) -> UserOut:
         has_photo=user.photo is not None,
         is_super_admin=user.is_super_admin,
         is_protected=user.is_protected,
+        onboarded=user.onboarded,
         setup_code=user.setup_code,
     )
 
@@ -190,6 +193,8 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
         user.email = payload.email
     if payload.phone is not None:
         user.phone = payload.phone
+    if payload.onboarded is not None:
+        user.onboarded = payload.onboarded
     session.add(user)
     session.commit()
     session.refresh(user)

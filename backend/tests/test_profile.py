@@ -158,3 +158,17 @@ def test_regenerate_setup_code(super_admin_client, user_a):
 def test_regenerate_setup_code_blocked_for_protected_account(super_admin_client, super_admin_user):
     r = super_admin_client.post(f"/users/{super_admin_user.id}/regenerate-setup-code")
     assert r.status_code == 403
+
+
+def test_new_user_starts_not_onboarded(super_admin_client):
+    r = super_admin_client.post("/users", json={"username": "nova", "password": "senha123"})
+    assert r.status_code == 200
+    assert r.json()["onboarded"] is False
+
+
+def test_user_marks_onboarding_done(user_a_client):
+    assert user_a_client.get("/auth/me").json()["onboarded"] is False
+    r = user_a_client.patch("/auth/me", json={"full_name": "Ana Paula", "onboarded": True})
+    assert r.status_code == 200
+    assert r.json()["onboarded"] is True
+    assert user_a_client.get("/auth/me").json()["onboarded"] is True
