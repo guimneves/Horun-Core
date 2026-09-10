@@ -10,60 +10,79 @@ const ROW_HEIGHT = 56
 const HEADER_HEIGHT = 38
 const ALLDAY_HEIGHT = 50
 const DAY_LABELS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']
+const RESIZE_HANDLE_PX = 10
+const HIDDEN_KEY = 'agenda.hiddenEquipment'
 
-// Reserva sendo arrastada — posição em edição, ainda não salva. `moved`
-// distingue "só cliquei" (vira exclusão, comportamento antigo) de
-// "arrastei de verdade" (vira reagendamento) no pointerup.
+const field = 'w-full rounded-lg px-3 py-2 text-sm outline-none'
+const fieldStyle = { background: 'var(--color-surface)', color: 'var(--color-text)' } as const
+const labelCls = 'mb-1 block text-xs font-medium'
+const labelStyle = { color: 'var(--color-text-muted)' } as const
+
+// Bloco sendo arrastado (mover) ou redimensionado (mudar duração).
+// `moved` distingue "só cliquei" (abre o painel de edição) de "arrastei"
+// (salva a nova posição/duração) no pointerup.
 interface DragState {
-  reservationId: number
-  equipmentId: string
+  kind: 'r' | 'e'
+  id: number
+  mode: 'move' | 'resize'
   dayIndex: number
   startFrac: number
-  durationHours: number
+  endFrac: number
+  equipmentId?: string
   moved: boolean
 }
 
 function getMonday(base: Date): Date {
   const d = new Date(base)
-  const day = d.getDay() // 0 = domingo
+  const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
   d.setHours(0, 0, 0, 0)
   return d
 }
-
 function addDays(date: Date, days: number): Date {
   const d = new Date(date)
   d.setDate(d.getDate() + days)
   return d
 }
-
 function isSameDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString()
 }
-
 function toLocalInputDate(date: Date): string {
   return toLocalIso(date).slice(0, 10)
 }
+function fracToDate(day: Date, frac: number): Date {
+  const hour = START_HOUR + frac
+  const d = new Date(day)
+  d.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0)
+  return d
+}
 
-function NewReservationPanel({
+// ── Painel de reserva (criar ou editar) ─────────────────────────────────
+function ReservationPanel({
   equipment,
-  onCreated,
+  initial,
+  canEdit,
+  onDone,
   onClose,
 }: {
   equipment: Equipment[]
-  onCreated: () => void
+  initial?: Reservation
+  canEdit: boolean
+  onDone: () => void
   onClose: () => void
 }) {
-  const [equipmentId, setEquipmentId] = useState(equipment[0]?.id ?? '')
-  const [title, setTitle] = useState('')
-  const [date, setDate] = useState(toLocalInputDate(new Date()))
-  const [start, setStart] = useState('09:00')
-  const [end, setEnd] = useState('10:00')
+  const editing = !!initial
+  const [equipmentId, setEquipmentId] = useState(initial?.equipment_id ?? equipment[0]?.id ?? '')
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(new Date()))
+  const [start, setStart] = useState(initial ? new Date(initial.start_at).toTimeString().slice(0, 5) : '09:00')
+  const [end, setEnd] = useState(initial ? new Date(initial.end_at).toTimeString().slice(0, 5) : '10:00')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const readOnly = editing && !canEdit
 
-  async function handleSubmit() {
+  async function save() {
     setError(null)
     if (!equipmentId) {
       setError('Cadastre um equipamento primeiro (Administração).')
@@ -71,115 +90,104 @@ function NewReservationPanel({
     }
     setBusy(true)
     try {
-      await api.createReservation({
-        equipment_id: equipmentId,
-        title,
-        start_at: `${date}T${start}:00`,
-        end_at: `${date}T${end}:00`,
-      })
-      onCreated()
+      const body = { equipment_id: equipmentId, title, start_at: `${date}T${start}:00`, end_at: `${date}T${end}:00` }
+      if (editing) await api.moveReservation(initial!.id, body)
+      else await api.createReservation(body)
+      onDone()
       onClose()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Não foi possível criar a reserva.')
+      setError(err instanceof ApiError ? err.message : 'Não foi possível salvar a reserva.')
     } finally {
+      setBusy(false)
+    }
+  }
+
+  async function remove() {
+    if (!confirm('Cancelar esta reserva?')) return
+    setBusy(true)
+    try {
+      await api.deleteReservation(initial!.id)
+      onDone()
+      onClose()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível cancelar.')
       setBusy(false)
     }
   }
 
   return (
     <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
-      <div className="mb-3 text-sm font-semibold">Nova reserva</div>
+      <div className="mb-3 text-sm font-semibold">{editing ? 'Reserva' : 'Nova reserva'}</div>
 
-      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Equipamento</label>
-      <select
-        value={equipmentId}
-        onChange={(e) => setEquipmentId(e.target.value)}
-        className="mb-3 w-full rounded-lg px-3 py-2 text-sm outline-none"
-        style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-      >
+      <label className={labelCls} style={labelStyle}>Equipamento</label>
+      <select value={equipmentId} onChange={(e) => setEquipmentId(e.target.value)} disabled={readOnly} className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle}>
         {equipment.map((eq) => (
-          <option key={eq.id} value={eq.id}>
-            {eq.display_name}
-          </option>
+          <option key={eq.id} value={eq.id}>{eq.display_name}</option>
         ))}
       </select>
 
-      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Título (opcional)</label>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="ex.: Rotina de análise"
-        className="mb-3 w-full rounded-lg px-3 py-2 text-sm outline-none"
-        style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-      />
+      <label className={labelCls} style={labelStyle}>Título (opcional)</label>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={readOnly} placeholder="ex.: Rotina de análise" className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
-      <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Data</label>
-      <input
-        type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        className="mb-3 w-full rounded-lg px-3 py-2 text-sm outline-none"
-        style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-      />
+      <label className={labelCls} style={labelStyle}>Data</label>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
       <div className="mb-3 flex gap-2">
         <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Início</label>
-          <input
-            type="time"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-          />
+          <label className={labelCls} style={labelStyle}>Início</label>
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} disabled={readOnly} className={`${field} disabled:opacity-60`} style={fieldStyle} />
         </div>
         <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Fim</label>
-          <input
-            type="time"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-          />
+          <label className={labelCls} style={labelStyle}>Fim</label>
+          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} disabled={readOnly} className={`${field} disabled:opacity-60`} style={fieldStyle} />
         </div>
       </div>
 
+      {editing && <p className="mb-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Reservado por {initial!.user_display_name}.</p>}
       {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
-      <div className="flex gap-2">
-        <button
-          onClick={handleSubmit}
-          disabled={busy}
-          className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50"
-          style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-        >
-          Reservar
-        </button>
-        <button
-          onClick={onClose}
-          className="rounded-lg border px-3.5 py-2 text-[13px]"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          Cancelar
-        </button>
-      </div>
+      {readOnly ? (
+        <button onClick={onClose} className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+      ) : (
+        <div className="flex gap-2">
+          <button onClick={save} disabled={busy} className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
+            {editing ? 'Salvar' : 'Reservar'}
+          </button>
+          {editing && (
+            <button onClick={remove} disabled={busy} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
+          )}
+          <button onClick={onClose} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+        </div>
+      )}
     </div>
   )
 }
 
-function NewEventPanel({ onCreated, onClose }: { onCreated: () => void; onClose: () => void }) {
-  const [title, setTitle] = useState('')
-  const [location, setLocation] = useState('')
-  const [allDay, setAllDay] = useState(false)
-  const [date, setDate] = useState(toLocalInputDate(new Date()))
-  const [endDate, setEndDate] = useState(toLocalInputDate(new Date()))
-  const [start, setStart] = useState('14:00')
-  const [end, setEnd] = useState('15:00')
+// ── Painel de evento (criar ou editar) ─────────────────────────────────
+function EventPanel({
+  initial,
+  canEdit,
+  onDone,
+  onClose,
+}: {
+  initial?: CalendarEvent
+  canEdit: boolean
+  onDone: () => void
+  onClose: () => void
+}) {
+  const editing = !!initial
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [location, setLocation] = useState(initial?.location ?? '')
+  const [allDay, setAllDay] = useState(initial?.all_day ?? false)
+  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(new Date()))
+  const [endDate, setEndDate] = useState(initial ? toLocalInputDate(new Date(initial.end_at)) : toLocalInputDate(new Date()))
+  const [start, setStart] = useState(initial && !initial.all_day ? new Date(initial.start_at).toTimeString().slice(0, 5) : '14:00')
+  const [end, setEnd] = useState(initial && !initial.all_day ? new Date(initial.end_at).toTimeString().slice(0, 5) : '15:00')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const readOnly = editing && !canEdit
 
-  async function handleSubmit() {
+  async function save() {
     setError(null)
     if (!title.trim()) {
       setError('Dê um título ao evento.')
@@ -187,81 +195,99 @@ function NewEventPanel({ onCreated, onClose }: { onCreated: () => void; onClose:
     }
     setBusy(true)
     try {
-      await api.createEvent({
+      const body = {
         title,
         location,
         all_day: allDay,
         start_at: allDay ? `${date}T00:00:00` : `${date}T${start}:00`,
         end_at: allDay ? `${endDate}T23:59:59` : `${date}T${end}:00`,
-      })
-      onCreated()
+      }
+      if (editing) await api.updateEvent(initial!.id, body)
+      else await api.createEvent(body)
+      onDone()
       onClose()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Não foi possível criar o evento.')
+      setError(err instanceof ApiError ? err.message : 'Não foi possível salvar o evento.')
     } finally {
       setBusy(false)
     }
   }
 
-  const field = 'w-full rounded-lg px-3 py-2 text-sm outline-none'
-  const fieldStyle = { background: 'var(--color-surface)', color: 'var(--color-text)' }
-  const labelCls = 'mb-1 block text-xs font-medium'
-  const labelStyle = { color: 'var(--color-text-muted)' }
+  async function remove() {
+    if (!confirm(`Remover o evento "${initial!.title}"?`)) return
+    setBusy(true)
+    try {
+      await api.deleteEvent(initial!.id)
+      onDone()
+      onClose()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível remover.')
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
-      <div className="mb-3 text-sm font-semibold">Novo evento</div>
+      <div className="mb-3 text-sm font-semibold">{editing ? 'Evento' : 'Novo evento'}</div>
 
       <label className={labelCls} style={labelStyle}>Título</label>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ex.: Reunião geral do NQTR" className={`mb-3 ${field}`} style={fieldStyle} />
+      <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={readOnly} placeholder="ex.: Reunião geral do NQTR" className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
       <label className={labelCls} style={labelStyle}>Local (opcional)</label>
-      <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ex.: Sala 512" className={`mb-3 ${field}`} style={fieldStyle} />
+      <input value={location} onChange={(e) => setLocation(e.target.value)} disabled={readOnly} placeholder="ex.: Sala 512" className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
       <label className="mb-3 flex items-center gap-2 text-[13px]">
-        <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+        <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} disabled={readOnly} />
         Dia inteiro
       </label>
 
       <label className={labelCls} style={labelStyle}>{allDay ? 'De' : 'Data'}</label>
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`mb-3 ${field}`} style={fieldStyle} />
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
       {allDay ? (
         <>
           <label className={labelCls} style={labelStyle}>Até</label>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`mb-3 ${field}`} style={fieldStyle} />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={readOnly} className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
         </>
       ) : (
         <div className="mb-3 flex gap-2">
           <div className="flex-1">
             <label className={labelCls} style={labelStyle}>Início</label>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={field} style={fieldStyle} />
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} disabled={readOnly} className={`${field} disabled:opacity-60`} style={fieldStyle} />
           </div>
           <div className="flex-1">
             <label className={labelCls} style={labelStyle}>Fim</label>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={field} style={fieldStyle} />
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} disabled={readOnly} className={`${field} disabled:opacity-60`} style={fieldStyle} />
           </div>
         </div>
       )}
 
+      {editing && <p className="mb-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Criado por {initial!.created_by_name}.</p>}
       {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
-      <div className="flex gap-2">
-        <button
-          onClick={handleSubmit}
-          disabled={busy}
-          className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50"
-          style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-        >
-          Criar evento
-        </button>
-        <button onClick={onClose} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>
-          Cancelar
-        </button>
-      </div>
+      {readOnly ? (
+        <button onClick={onClose} className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+      ) : (
+        <div className="flex gap-2">
+          <button onClick={save} disabled={busy} className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
+            {editing ? 'Salvar' : 'Criar evento'}
+          </button>
+          {editing && (
+            <button onClick={remove} disabled={busy} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
+          )}
+          <button onClick={onClose} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+        </div>
+      )}
     </div>
   )
 }
+
+type Panel =
+  | { kind: 'new-reservation' }
+  | { kind: 'new-event' }
+  | { kind: 'reservation'; data: Reservation }
+  | { kind: 'event'; data: CalendarEvent }
+  | null
 
 export function AgendaPage() {
   const { user } = useAuth()
@@ -270,14 +296,21 @@ export function AgendaPage() {
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [birthdays, setBirthdays] = useState<Birthday[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [showEventForm, setShowEventForm] = useState(false)
+  const [panel, setPanel] = useState<Panel>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [hidden, setHidden] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'))
+    } catch {
+      return new Set()
+    }
+  })
   const gridRef = useRef<HTMLDivElement>(null)
 
   const monday = useMemo(() => addDays(getMonday(new Date()), weekOffset * 7), [weekOffset])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday])
   const equipmentById = useMemo(() => new Map(equipment.map((e) => [e.id, e])), [equipment])
+  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
 
   function reload() {
     const start = monday
@@ -296,88 +329,128 @@ export function AgendaPage() {
       })
       .catch(() => {})
   }
-
   useEffect(reload, [weekOffset])
 
-  async function handleDeleteEvent(ev: CalendarEvent) {
-    if (!user?.is_super_admin) return
-    if (!confirm(`Remover o evento "${ev.title}"?`)) return
-    await api.deleteEvent(ev.id)
-    reload()
+  function toggleEquipment(id: string) {
+    setHidden((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      try {
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
+      } catch {
+        /* ok */
+      }
+      return next
+    })
   }
 
-  function birthdaysForDay(day: Date): Birthday[] {
+  const canEditReservation = (r: Reservation) => r.user_id === user?.id || !!user?.is_super_admin
+  const canEditEvent = () => !!user?.is_super_admin
+
+  function birthdaysForDay(day: Date) {
     const key = toLocalInputDate(day)
     return birthdays.filter((b) => b.date === key)
   }
-  function allDayEventsForDay(day: Date): CalendarEvent[] {
+  function allDayEventsForDay(day: Date) {
     const key = toLocalInputDate(day)
     return events.filter((e) => e.all_day && e.start_at.slice(0, 10) <= key && e.end_at.slice(0, 10) >= key)
   }
-  function timedEventsForDay(day: Date): CalendarEvent[] {
+  function timedEventsForDay(day: Date) {
     return events.filter((e) => !e.all_day && isSameDay(new Date(e.start_at), day))
   }
 
-  async function handleDelete(reservation: Reservation) {
-    if (reservation.user_id !== user?.id && !user?.is_super_admin) return
-    if (!confirm(`Cancelar a reserva de ${equipmentById.get(reservation.equipment_id)?.display_name ?? reservation.equipment_id}?`)) return
-    await api.deleteReservation(reservation.id)
-    reload()
+  // ── Arrastar / redimensionar ────────────────────────────────────────
+  function startDrag(
+    e: React.PointerEvent,
+    kind: 'r' | 'e',
+    id: number,
+    dayIndex: number,
+    startFrac: number,
+    endFrac: number,
+    equipmentId?: string,
+  ) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const onHandle = e.clientY > rect.bottom - RESIZE_HANDLE_PX
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* ok */
+    }
+    setDrag({ kind, id, mode: onHandle ? 'resize' : 'move', dayIndex, startFrac, endFrac, equipmentId, moved: false })
   }
 
-  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
-  const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
-
-  function startDrag(e: React.PointerEvent, r: Reservation, dayIndex: number, startFrac: number, durationHours: number) {
-    const canMove = r.user_id === user?.id || user?.is_super_admin
-    if (!canMove) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    setDrag({ reservationId: r.id, equipmentId: r.equipment_id, dayIndex, startFrac, durationHours, moved: false })
-  }
-
-  function onDragMove(e: React.PointerEvent, r: Reservation) {
-    if (!drag || drag.reservationId !== r.id) return
+  function onDragMove(e: React.PointerEvent) {
+    if (!drag) return
+    const editable = drag.kind === 'r' ? canEditReservation(reservations.find((r) => r.id === drag.id)!) : canEditEvent()
+    if (!editable) return
     const gridEl = gridRef.current
     if (!gridEl) return
     const rect = gridEl.getBoundingClientRect()
-    const dayWidth = rect.width / 7
-    const newDayIndex = Math.min(6, Math.max(0, Math.floor((e.clientX - rect.left) / dayWidth)))
-    const relY = e.clientY - rect.top - HEADER_HEIGHT
+    const relY = e.clientY - rect.top - HEADER_HEIGHT - ALLDAY_HEIGHT
     const rawFrac = relY / ROW_HEIGHT
-    const snapped = Math.round(rawFrac * 4) / 4 // passos de 15 min
-    const maxStart = hours.length - drag.durationHours
-    const clampedFrac = Math.min(Math.max(snapped, 0), Math.max(maxStart, 0))
-    setDrag((d) => (d ? { ...d, dayIndex: newDayIndex, startFrac: clampedFrac, moved: true } : d))
+    const snapped = Math.round(rawFrac * 4) / 4 // 15 min
+
+    if (drag.mode === 'resize') {
+      const newEnd = Math.min(Math.max(snapped, drag.startFrac + 0.25), hours.length)
+      setDrag((d) => (d ? { ...d, endFrac: newEnd, moved: true } : d))
+    } else {
+      const dayWidth = rect.width / 7
+      const newDayIndex = Math.min(6, Math.max(0, Math.floor((e.clientX - rect.left) / dayWidth)))
+      const duration = drag.endFrac - drag.startFrac
+      const newStart = Math.min(Math.max(snapped, 0), hours.length - duration)
+      setDrag((d) => (d ? { ...d, dayIndex: newDayIndex, startFrac: newStart, endFrac: newStart + duration, moved: true } : d))
+    }
   }
 
-  async function onDragEnd(e: React.PointerEvent, r: Reservation) {
-    if (!drag || drag.reservationId !== r.id) return
-    e.currentTarget.releasePointerCapture(e.pointerId)
-    const finished = drag
+  async function onDragEnd(e: React.PointerEvent) {
+    if (!drag) return
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ok */
+    }
+    const d = drag
     setDrag(null)
 
-    if (!finished.moved) {
-      handleDelete(r)
+    if (!d.moved) {
+      if (d.kind === 'r') {
+        const r = reservations.find((x) => x.id === d.id)
+        if (r) setPanel({ kind: 'reservation', data: r })
+      } else {
+        const ev = events.find((x) => x.id === d.id)
+        if (ev) setPanel({ kind: 'event', data: ev })
+      }
       return
     }
 
-    const newStartHour = START_HOUR + finished.startFrac
-    const newStart = new Date(days[finished.dayIndex])
-    newStart.setHours(Math.floor(newStartHour), Math.round((newStartHour % 1) * 60), 0, 0)
-    const newEnd = new Date(newStart.getTime() + finished.durationHours * 3600 * 1000)
-
+    const newStart = fracToDate(days[d.dayIndex], d.startFrac)
+    const newEnd = fracToDate(days[d.dayIndex], d.endFrac)
     try {
-      await api.moveReservation(r.id, {
-        equipment_id: r.equipment_id,
-        start_at: toLocalIso(newStart),
-        end_at: toLocalIso(newEnd),
-      })
+      if (d.kind === 'r') {
+        const r = reservations.find((x) => x.id === d.id)!
+        await api.moveReservation(d.id, {
+          equipment_id: r.equipment_id,
+          start_at: toLocalIso(newStart),
+          end_at: toLocalIso(newEnd),
+        })
+      } else {
+        const ev = events.find((x) => x.id === d.id)!
+        await api.updateEvent(d.id, {
+          title: ev.title,
+          location: ev.location,
+          all_day: false,
+          start_at: toLocalIso(newStart),
+          end_at: toLocalIso(newEnd),
+        })
+      }
       reload()
     } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Não foi possível mover a reserva.')
-      reload() // desfaz visualmente — a grade volta a refletir o servidor
+      alert(err instanceof ApiError ? err.message : 'Não foi possível salvar.')
+      reload()
     }
   }
+
+  const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
 
   return (
     <div className="flex h-full">
@@ -385,11 +458,7 @@ export function AgendaPage() {
         {/* Toolbar */}
         <div className="flex h-[60px] flex-shrink-0 items-center justify-between px-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-3.5">
-            <button
-              onClick={() => setWeekOffset(0)}
-              className="rounded-lg border px-4 py-1.5 text-[13px] font-semibold"
-              style={{ borderColor: 'var(--color-border)' }}
-            >
+            <button onClick={() => setWeekOffset(0)} className="rounded-lg border px-4 py-1.5 text-[13px] font-semibold" style={{ borderColor: 'var(--color-border)' }}>
               Hoje
             </button>
             <button onClick={() => setWeekOffset((w) => w - 1)} className="flex h-[30px] w-[30px] items-center justify-center rounded-lg" style={{ color: 'var(--color-text-muted)' }}>
@@ -402,20 +471,12 @@ export function AgendaPage() {
           </div>
           <div className="flex items-center gap-2">
             {user?.is_super_admin && (
-              <button
-                onClick={() => { setShowEventForm(true); setShowForm(false) }}
-                className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-[13px] font-semibold"
-                style={{ borderColor: 'var(--color-border)' }}
-              >
+              <button onClick={() => setPanel({ kind: 'new-event' })} className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-[13px] font-semibold" style={{ borderColor: 'var(--color-border)' }}>
                 <PlusIcon />
                 Novo evento
               </button>
             )}
-            <button
-              onClick={() => { setShowForm(true); setShowEventForm(false) }}
-              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-semibold"
-              style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-            >
+            <button onClick={() => setPanel({ kind: 'new-reservation' })} className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] font-semibold" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
               <PlusIcon />
               Nova reserva
             </button>
@@ -436,56 +497,38 @@ export function AgendaPage() {
             {days.map((day, dayIndex) => {
               const today = isSameDay(day, new Date())
               const dayReservations = reservations.filter((r) => {
-                if (drag && drag.reservationId === r.id) return drag.dayIndex === dayIndex
+                if (hidden.has(r.equipment_id)) return false
+                if (drag && drag.kind === 'r' && drag.id === r.id) return drag.dayIndex === dayIndex
                 return isSameDay(new Date(r.start_at), day)
+              })
+              const dayEvents = timedEventsForDay(day).filter((e) => {
+                if (drag && drag.kind === 'e' && drag.id === e.id) return drag.dayIndex === dayIndex
+                return true
               })
               return (
                 <div
                   key={dayIndex}
                   className="relative"
-                  style={{
-                    borderRight: dayIndex < 6 ? '1px solid var(--color-border)' : undefined,
-                    background: today ? 'var(--color-surface)' : undefined,
-                  }}
+                  style={{ borderRight: dayIndex < 6 ? '1px solid var(--color-border)' : undefined, background: today ? 'var(--color-surface)' : undefined }}
                 >
-                  <div
-                    className="flex h-[38px] flex-col items-center justify-center"
-                    style={{ borderBottom: '1px solid var(--color-border)' }}
-                  >
+                  <div className="flex h-[38px] flex-col items-center justify-center" style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <span className="text-[11px]" style={{ color: today ? 'var(--color-primary)' : 'var(--color-text-muted)', fontWeight: today ? 600 : 400 }}>
                       {DAY_LABELS[dayIndex]}
                     </span>
-                    <span
-                      className="flex h-[22px] w-[22px] items-center justify-center rounded-full text-[12.5px] font-semibold"
-                      style={today ? { background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' } : undefined}
-                    >
+                    <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full text-[12.5px] font-semibold" style={today ? { background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' } : undefined}>
                       {day.getDate()}
                     </span>
                   </div>
 
-                  {/* Faixa "dia inteiro": aniversários + eventos all-day */}
-                  <div
-                    className="flex flex-col gap-0.5 overflow-y-auto px-1 py-1"
-                    style={{ height: ALLDAY_HEIGHT, borderBottom: '1px solid var(--color-border)' }}
-                  >
+                  {/* Faixa dia-inteiro: aniversários + eventos all-day */}
+                  <div className="flex flex-col gap-0.5 overflow-y-auto px-1 py-1" style={{ height: ALLDAY_HEIGHT, borderBottom: '1px solid var(--color-border)' }}>
                     {birthdaysForDay(day).map((b) => (
-                      <div
-                        key={`b${b.user_id}`}
-                        className="truncate rounded px-1.5 py-0.5 text-[10.5px] font-medium"
-                        style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-                        title={`Aniversário de ${b.name}`}
-                      >
+                      <div key={`b${b.user_id}`} className="truncate rounded px-1.5 py-0.5 text-[10.5px] font-medium" style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }} title={`Aniversário de ${b.name}`}>
                         🎂 {b.name}
                       </div>
                     ))}
                     {allDayEventsForDay(day).map((e) => (
-                      <button
-                        key={`e${e.id}`}
-                        onClick={() => handleDeleteEvent(e)}
-                        className="truncate rounded px-1.5 py-0.5 text-left text-[10.5px] font-medium"
-                        style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-                        title={user?.is_super_admin ? `${e.title} — clique para remover` : e.title}
-                      >
+                      <button key={`e${e.id}`} onClick={() => setPanel({ kind: 'event', data: e })} className="truncate rounded px-1.5 py-0.5 text-left text-[10.5px] font-medium" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }} title={e.title}>
                         {e.title}
                       </button>
                     ))}
@@ -496,75 +539,88 @@ export function AgendaPage() {
                       <div key={h} style={{ height: ROW_HEIGHT, borderTop: '1px solid var(--color-border)' }} />
                     ))}
 
-                    {timedEventsForDay(day).map((e) => {
-                      const s = new Date(e.start_at)
-                      const en = new Date(e.end_at)
-                      const startFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
-                      const endFrac = en.getHours() + en.getMinutes() / 60 - START_HOUR
+                    {dayEvents.map((e) => {
+                      const dragging = drag?.kind === 'e' && drag.id === e.id
+                      let sFrac: number, eFrac: number
+                      if (dragging && drag) {
+                        sFrac = drag.startFrac
+                        eFrac = drag.endFrac
+                      } else {
+                        const s = new Date(e.start_at)
+                        const en = new Date(e.end_at)
+                        sFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
+                        eFrac = en.getHours() + en.getMinutes() / 60 - START_HOUR
+                      }
+                      const editable = canEditEvent()
                       return (
-                        <button
+                        <div
                           key={`ev${e.id}`}
-                          onClick={() => handleDeleteEvent(e)}
+                          onPointerDown={(ev) => editable && startDrag(ev, 'e', e.id, dayIndex, sFrac, eFrac)}
+                          onPointerMove={onDragMove}
+                          onPointerUp={onDragEnd}
+                          onClick={() => !editable && setPanel({ kind: 'event', data: e })}
                           className="absolute left-[3px] right-[3px] overflow-hidden rounded-md px-2 py-1 text-left"
                           style={{
-                            top: startFrac * ROW_HEIGHT + 2,
-                            height: Math.max((endFrac - startFrac) * ROW_HEIGHT - 4, 20),
+                            top: sFrac * ROW_HEIGHT + 2,
+                            height: Math.max((eFrac - sFrac) * ROW_HEIGHT - 4, 20),
                             background: 'var(--color-bg-elevated)',
                             borderLeft: '3px solid var(--color-primary)',
-                            boxShadow: 'inset 0 0 0 1px var(--color-border)',
+                            boxShadow: dragging ? '0 4px 14px rgba(0,0,0,0.35)' : 'inset 0 0 0 1px var(--color-border)',
+                            cursor: editable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
+                            touchAction: 'none',
+                            userSelect: 'none',
+                            zIndex: dragging ? 10 : undefined,
                           }}
-                          title={user?.is_super_admin ? `${e.title} — clique para remover` : e.title}
+                          title={editable ? 'Arraste para mover · borda de baixo para redimensionar · clique para editar' : e.title}
                         >
-                          <div className="truncate text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>
-                            {e.title}
-                          </div>
-                          <div className="truncate text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
-                            {e.location || e.created_by_name}
-                          </div>
-                        </button>
+                          <div className="truncate text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{e.title}</div>
+                          <div className="truncate text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{e.location || e.created_by_name}</div>
+                          {editable && <div className="absolute inset-x-0 bottom-0" style={{ height: RESIZE_HANDLE_PX, cursor: 'ns-resize' }} />}
+                        </div>
                       )
                     })}
 
                     {dayReservations.map((r) => {
-                      const isDragging = drag?.reservationId === r.id
-                      let startFrac: number
-                      let endFrac: number
-                      if (isDragging && drag) {
-                        startFrac = drag.startFrac
-                        endFrac = drag.startFrac + drag.durationHours
+                      const dragging = drag?.kind === 'r' && drag.id === r.id
+                      let sFrac: number, eFrac: number
+                      if (dragging && drag) {
+                        sFrac = drag.startFrac
+                        eFrac = drag.endFrac
                       } else {
                         const s = new Date(r.start_at)
-                        const e = new Date(r.end_at)
-                        startFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
-                        endFrac = e.getHours() + e.getMinutes() / 60 - START_HOUR
+                        const en = new Date(r.end_at)
+                        sFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
+                        eFrac = en.getHours() + en.getMinutes() / 60 - START_HOUR
                       }
                       const eq = equipmentById.get(r.equipment_id)
-                      const canMove = r.user_id === user?.id || user?.is_super_admin
+                      const editable = canEditReservation(r)
                       return (
                         <div
                           key={r.id}
-                          onPointerDown={(e) => startDrag(e, r, dayIndex, startFrac, endFrac - startFrac)}
-                          onPointerMove={(e) => onDragMove(e, r)}
-                          onPointerUp={(e) => onDragEnd(e, r)}
+                          onPointerDown={(ev) => editable && startDrag(ev, 'r', r.id, dayIndex, sFrac, eFrac, r.equipment_id)}
+                          onPointerMove={onDragMove}
+                          onPointerUp={onDragEnd}
+                          onClick={() => !editable && setPanel({ kind: 'reservation', data: r })}
                           className="absolute left-[3px] right-[3px] overflow-hidden rounded-md px-2 py-1.5"
                           style={{
-                            top: startFrac * ROW_HEIGHT + 2,
-                            height: Math.max((endFrac - startFrac) * ROW_HEIGHT - 4, 22),
+                            top: sFrac * ROW_HEIGHT + 2,
+                            height: Math.max((eFrac - sFrac) * ROW_HEIGHT - 4, 22),
                             background: eq?.color ?? 'var(--color-primary)',
-                            cursor: canMove ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                            cursor: editable ? (dragging ? 'grabbing' : 'grab') : 'pointer',
                             touchAction: 'none',
                             userSelect: 'none',
-                            boxShadow: isDragging ? '0 4px 14px rgba(0,0,0,0.35)' : undefined,
-                            zIndex: isDragging ? 10 : undefined,
-                            opacity: isDragging ? 0.9 : 1,
+                            boxShadow: dragging ? '0 4px 14px rgba(0,0,0,0.35)' : undefined,
+                            zIndex: dragging ? 10 : undefined,
+                            opacity: dragging ? 0.9 : 1,
                           }}
-                          title={canMove ? 'Arraste para reagendar, clique para cancelar' : undefined}
+                          title={editable ? 'Arraste para mover · borda de baixo para redimensionar · clique para editar' : `${eq?.display_name ?? r.equipment_id} — ${r.user_display_name}`}
                         >
                           <div className="truncate text-[11px] font-semibold text-white">{eq?.display_name ?? r.equipment_id}</div>
                           <div className="truncate text-[10.5px]" style={{ color: 'rgba(255,255,255,0.78)' }}>
                             {r.user_display_name}
                             {r.title ? ` · ${r.title}` : ''}
                           </div>
+                          {editable && <div className="absolute inset-x-0 bottom-0" style={{ height: RESIZE_HANDLE_PX, cursor: 'ns-resize' }} />}
                         </div>
                       )
                     })}
@@ -578,9 +634,18 @@ export function AgendaPage() {
 
       {/* Sidebar direita */}
       <div className="flex w-[280px] flex-shrink-0 flex-col gap-6 overflow-y-auto p-5" style={{ borderLeft: '1px solid var(--color-border)' }}>
-        {showForm && <NewReservationPanel equipment={equipment} onCreated={reload} onClose={() => setShowForm(false)} />}
-        {showEventForm && <NewEventPanel onCreated={reload} onClose={() => setShowEventForm(false)} />}
-        {!showForm && !showEventForm && (
+        {panel?.kind === 'new-reservation' && (
+          <ReservationPanel equipment={equipment} canEdit onDone={reload} onClose={() => setPanel(null)} />
+        )}
+        {panel?.kind === 'reservation' && (
+          <ReservationPanel equipment={equipment} initial={panel.data} canEdit={canEditReservation(panel.data)} onDone={reload} onClose={() => setPanel(null)} />
+        )}
+        {panel?.kind === 'new-event' && <EventPanel canEdit onDone={reload} onClose={() => setPanel(null)} />}
+        {panel?.kind === 'event' && (
+          <EventPanel initial={panel.data} canEdit={canEditEvent()} onDone={reload} onClose={() => setPanel(null)} />
+        )}
+
+        {panel === null && (
           <>
             <div>
               <div className="mb-3 text-[12.5px] font-semibold uppercase" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.04em' }}>
@@ -592,12 +657,20 @@ export function AgendaPage() {
                 </p>
               )}
               <div className="flex flex-col gap-2.5">
-                {equipment.map((eq) => (
-                  <div key={eq.id} className="flex items-center gap-2.5">
-                    <div className="h-3.5 w-3.5 flex-shrink-0 rounded" style={{ background: eq.color }} />
-                    <span className="text-[13px]">{eq.display_name}</span>
-                  </div>
-                ))}
+                {equipment.map((eq) => {
+                  const off = hidden.has(eq.id)
+                  return (
+                    <button key={eq.id} onClick={() => toggleEquipment(eq.id)} className="flex items-center gap-2.5 text-left" title={off ? 'Mostrar na agenda' : 'Esconder da agenda'}>
+                      <span
+                        className="h-3.5 w-3.5 flex-shrink-0 rounded"
+                        style={off ? { border: `2px solid ${eq.color}`, background: 'transparent' } : { background: eq.color }}
+                      />
+                      <span className="text-[13px]" style={{ color: off ? 'var(--color-text-muted)' : 'var(--color-text)', textDecoration: off ? 'line-through' : undefined }}>
+                        {eq.display_name}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 

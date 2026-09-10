@@ -318,8 +318,10 @@ export const api = {
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),
   createReservation: (payload: { equipment_id: string; title?: string; start_at: string; end_at: string }) =>
     request<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(payload) }),
-  moveReservation: (reservationId: number, payload: { equipment_id: string; start_at: string; end_at: string }) =>
-    request<Reservation>(`/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  moveReservation: (
+    reservationId: number,
+    payload: { equipment_id: string; start_at: string; end_at: string; title?: string },
+  ) => request<Reservation>(`/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteReservation: (reservationId: number) =>
     request<{ ok: boolean }>(`/reservations/${reservationId}`, { method: 'DELETE' }),
 

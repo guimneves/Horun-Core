@@ -25,13 +25,13 @@ class ReservationIn(BaseModel):
 
 
 class ReservationMoveIn(BaseModel):
-    """Corpo do PATCH usado ao arrastar um bloco na Agenda — só os dois
-    campos que uma arrastada muda (dia/hora); trocar de equipamento
-    arrastando pra outra coluna também usa isto."""
+    """Corpo do PATCH — usado tanto ao arrastar/redimensionar na grade
+    quanto pelo painel de edição. `title` só vem do painel."""
 
     equipment_id: str
     start_at: datetime
     end_at: datetime
+    title: str | None = None
 
 
 class ReservationOut(BaseModel):
@@ -152,6 +152,8 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
     reservation.equipment_id = payload.equipment_id
     reservation.start_at = payload.start_at
     reservation.end_at = payload.end_at
+    if payload.title is not None:
+        reservation.title = payload.title
     session.add(reservation)
     session.commit()
     session.refresh(reservation)

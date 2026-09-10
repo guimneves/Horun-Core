@@ -137,6 +137,12 @@ Pedido do usuário: o Horun (Core e/ou módulos específicos) deve conseguir gra
   - 128 testes no total (`tests/test_events.py` + testes de nascimento/aniversário em `test_profile.py`). Validado no navegador (nascimento salvando e pré-preenchendo; 🎂 na Agenda e nos dois widgets; evento all-day e com hora renderizando).
   - **Falta (Fases 2 e 3, a alinhar depois da 1 em produção)**: `Group` + `GroupMembership` (`internal_admin_id` → user, obrigatoriamente super-admin) + aba "Grupos" no Admin + seletor de escopo no Mural/Agenda; `Post.group_id` e `Event.group_id` com filtro por `group_id IS NULL OR group_id IN (meus_grupos)`.
 
+- **Ajustes pré-Fase 2 — implementado em 2026-09-10**:
+  - **Nome de usuário virou slug obrigatório** (`^[a-zA-Z0-9._-]{2,}$`): "Lucas Pereira" com espaço fazia `@Lucas Pereira` cortar no espaço e a menção não era reconhecida. `create_user` valida; `UpdateUserRequest` ganhou `username` (com unicidade) → admin renomeia pela tabela. `AdminPage` faz slugify ao vivo e mostra `@username`.
+  - **Lembrete semanal de aniversários**: APScheduler em processo (`app/core/scheduler.py`), job seg 07:30 America/Sao_Paulo, `misfire_grace_time` 6h. `send_weekly_birthday_reminder` (`app/services/reminders.py`) cria uma notificação `kind="birthday_week"` pra cada usuário; idempotente por semana via tabela `AppState` (chave-valor). `POST /admin/reminders/weekly-birthdays` dispara na hora (super-admin). Desligado nos testes (`CORE_SCHEDULER=0`).
+  - **Agenda v2**: clicar num bloco (reserva ou evento) abre o painel de edição na lateral (era "clicar = excluir"); arrastar o corpo = mover; arrastar a borda de baixo (10px) = redimensionar a duração (snap 15min). Eventos também são móveis/redimensionáveis (só admin). `PATCH /reservations/{id}` passou a aceitar `title`. Na legenda de equipamentos, clicar num item liga/desliga ele da visualização (bolinha vira contorno oco + tachado), com `localStorage`. Permissões: reserva editável pelo criador ou admin; reserva/evento de admin, só admin (o backend já garantia; agora a UI reflete — bloco não editável abre painel só-leitura).
+  - 12 testes novos, 141 no total. Validado no navegador (renomear, lembrete via endpoint, clicar-editar-salvar, redimensionar, ligar/desligar equipamento).
+
 **Ainda não implementado**:
 
 1. **Plugar os módulos da Juliana (Amostras, Reagentes)** — situação em 2026-09-10:

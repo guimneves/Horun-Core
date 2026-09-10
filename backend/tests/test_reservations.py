@@ -207,3 +207,44 @@ def test_move_reservation_to_different_equipment(super_admin_client, user_a_clie
     )
     assert r.status_code == 200
     assert r.json()["equipment_id"] == "leco832"
+
+
+def test_patch_updates_title(super_admin_client, user_a_client):
+    _register_equipment(super_admin_client)
+    rid = user_a_client.post(
+        "/reservations",
+        json={"equipment_id": "re7s", "title": "antigo", "start_at": "2026-09-10T09:00:00", "end_at": "2026-09-10T11:00:00"},
+    ).json()["id"]
+    r = user_a_client.patch(
+        f"/reservations/{rid}",
+        json={"equipment_id": "re7s", "title": "novo", "start_at": "2026-09-10T09:00:00", "end_at": "2026-09-10T11:00:00"},
+    )
+    assert r.status_code == 200
+    assert r.json()["title"] == "novo"
+
+
+def test_admin_can_edit_a_users_reservation(super_admin_client, user_a_client):
+    _register_equipment(super_admin_client)
+    rid = user_a_client.post(
+        "/reservations",
+        json={"equipment_id": "re7s", "start_at": "2026-09-10T09:00:00", "end_at": "2026-09-10T11:00:00"},
+    ).json()["id"]
+    r = super_admin_client.patch(
+        f"/reservations/{rid}",
+        json={"equipment_id": "re7s", "start_at": "2026-09-10T13:00:00", "end_at": "2026-09-10T15:00:00"},
+    )
+    assert r.status_code == 200
+
+
+def test_regular_user_cannot_edit_admin_reservation(super_admin_client, user_a_client):
+    _register_equipment(super_admin_client)
+    rid = super_admin_client.post(
+        "/reservations",
+        json={"equipment_id": "re7s", "start_at": "2026-09-10T09:00:00", "end_at": "2026-09-10T11:00:00"},
+    ).json()["id"]
+    r = user_a_client.patch(
+        f"/reservations/{rid}",
+        json={"equipment_id": "re7s", "start_at": "2026-09-10T13:00:00", "end_at": "2026-09-10T15:00:00"},
+    )
+    assert r.status_code == 403
+    assert user_a_client.delete(f"/reservations/{rid}").status_code == 403
