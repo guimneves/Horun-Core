@@ -83,6 +83,11 @@ def _run_migrations() -> None:
     if engine.dialect.name == "postgresql":
         with engine.begin() as conn:
             conn.exec_driver_sql('ALTER TABLE "user" ALTER COLUMN password_hash DROP NOT NULL')
+            # `module.codename` saiu do modelo (codinomes nunca aparecem —
+            # Prompt_Horun_Core.md §2). Numa instalação que já rodou antes
+            # disso, a coluna ficou NOT NULL e quebra o INSERT de módulo
+            # novo com "null value violates not-null constraint".
+            conn.exec_driver_sql('ALTER TABLE "module" DROP COLUMN IF EXISTS codename')
 
 
 def create_db_and_tables() -> None:

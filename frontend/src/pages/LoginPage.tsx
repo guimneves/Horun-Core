@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import nqtrLogo from '@horun/design-system/src/assets/nqtr-logo.png'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import horunIcon from '../assets/horun-icon.png'
+import nqtrLogo from '../assets/nqtr-logo.png'
 
 type Mode = 'login' | 'primeiro-acesso'
 
@@ -81,8 +82,8 @@ export function LoginPage() {
           <circle cx="240" cy="240" r="120" stroke="white" strokeWidth="1.5" />
         </svg>
 
-        <div className="relative inline-flex w-fit items-center rounded-xl bg-white/95 px-3 py-2">
-          <img src={nqtrLogo} alt="NQTR" className="h-8 w-auto" />
+        <div className="relative inline-flex w-fit items-center rounded-2xl bg-white/95 px-5 py-4">
+          <img src={nqtrLogo} alt="NQTR" className="h-16 w-auto" />
         </div>
 
         <div className="relative">
@@ -99,8 +100,10 @@ export function LoginPage() {
 
       {/* Painel direito — formulário */}
       <div className="flex flex-1 items-center justify-center p-8">
-        {mode === 'login' ? (
-          <form onSubmit={handleLogin} className="w-full max-w-[380px]">
+        <div className="w-full max-w-[380px]">
+          <img src={horunIcon} alt="Horun" className="mb-6 h-16 w-16 rounded-2xl" />
+          {mode === 'login' ? (
+          <form onSubmit={handleLogin} className="w-full">
             <div className="mb-1 text-[22px] font-semibold">Entrar</div>
             <div className="mb-8 text-sm" style={{ color: 'var(--color-text-muted)' }}>
               Use sua conta do laboratório NQTR.
@@ -151,7 +154,7 @@ export function LoginPage() {
             </p>
           </form>
         ) : (
-          <form onSubmit={handleSetPassword} className="w-full max-w-[380px]">
+          <form onSubmit={handleSetPassword} className="w-full">
             <div className="mb-1 text-[22px] font-semibold">Primeiro acesso</div>
             <div className="mb-8 text-sm" style={{ color: 'var(--color-text-muted)' }}>
               Use o código de acesso que o administrador te passou para definir a sua própria senha.
@@ -219,7 +222,8 @@ export function LoginPage() {
               </button>
             </p>
           </form>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
