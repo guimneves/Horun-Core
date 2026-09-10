@@ -247,7 +247,14 @@ export const api = {
   }) => request<CurrentUser>('/users', { method: 'POST', body: JSON.stringify(payload) }),
   updateUser: (
     userId: number,
-    payload: { display_name?: string; password?: string; is_super_admin?: boolean; position?: string; qualification?: string },
+    payload: {
+      username?: string
+      display_name?: string
+      password?: string
+      is_super_admin?: boolean
+      position?: string
+      qualification?: string
+    },
   ) => request<CurrentUser>(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   regenerateSetupCode: (userId: number) =>
     request<CurrentUser>(`/users/${userId}/regenerate-setup-code`, { method: 'POST' }),

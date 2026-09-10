@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import re
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, status
@@ -26,6 +27,23 @@ _ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 def _validate_choice(value: str, allowed: list[str], field_name: str) -> str:
     if value and value not in allowed:
         raise ValueError(f"{field_name} inválido — use um dos valores permitidos ou deixe em branco.")
+    return value
+
+
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,}$")
+
+
+def _validate_username(value: str) -> str:
+    """Nome de usuário tem que ser um "slug": sem espaço, sem acento. Isso
+    é o que quebra a menção — `@Lucas Pereira` corta no espaço e o
+    `@usuario` deixa de ser reconhecido (o Lucas não é notificado)."""
+    value = value.strip()
+    if not _USERNAME_RE.fullmatch(value):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Nome de usuário só pode ter letras sem acento, números, ponto, hífen e sublinhado — "
+            "sem espaços (ex.: lucas.pereira).",
+        )
     return value
 
 
@@ -101,6 +119,7 @@ class UpdateUserRequest(BaseModel):
     pessoa não deveria mudar sozinha (papel, posição/qualificação
     institucional)."""
 
+    username: str | None = None
     display_name: str | None = None
     password: str | None = None
     is_super_admin: bool | None = None
@@ -285,12 +304,13 @@ def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: Ses
     """Só o administrador máximo cria usuários locais — importação
     automática do AD (Prompt_Horun_Core.md, seção 4) ainda não
     implementada."""
-    existing = session.exec(select(User).where(User.username == payload.username)).first()
+    username = _validate_username(payload.username)
+    existing = session.exec(select(User).where(User.username == username)).first()
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Nome de usuário já existe")
 
     user = User(
-        username=payload.username,
+        username=username,
         password_hash=hash_password(payload.password) if payload.password else None,
         setup_code=None if payload.password else generate_setup_code(),
         display_name=payload.display_name or payload.username,
@@ -403,6 +423,13 @@ def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser
             "Esta é a conta protegida do Core — não pode ser alterada, para sempre haver um acesso de backup.",
         )
 
+    if payload.username is not None:
+        new_username = _validate_username(payload.username)
+        if new_username != user.username:
+            clash = session.exec(select(User).where(User.username == new_username)).first()
+            if clash is not None:
+                raise HTTPException(status.HTTP_409_CONFLICT, "Nome de usuário já existe")
+            user.username = new_username
     if payload.display_name is not None:
         user.display_name = payload.display_name
     if payload.password is not None:

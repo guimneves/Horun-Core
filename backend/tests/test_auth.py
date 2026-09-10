@@ -49,6 +49,38 @@ def test_duplicate_username_conflicts(super_admin_client):
     assert r.status_code == 409
 
 
+def test_username_with_space_rejected(super_admin_client):
+    r = super_admin_client.post("/users", json={"username": "Lucas Pereira", "password": "x123456"})
+    assert r.status_code == 400
+
+
+def test_username_with_accent_rejected(super_admin_client):
+    r = super_admin_client.post("/users", json={"username": "joão.silva", "password": "x123456"})
+    assert r.status_code == 400
+
+
+def test_slug_username_accepted(super_admin_client):
+    r = super_admin_client.post("/users", json={"username": "lucas.pereira", "password": "x123456"})
+    assert r.status_code == 200
+    assert r.json()["username"] == "lucas.pereira"
+
+
+def test_admin_renames_user(super_admin_client, user_a):
+    r = super_admin_client.patch(f"/users/{user_a.id}", json={"username": "novo.nome"})
+    assert r.status_code == 200
+    assert r.json()["username"] == "novo.nome"
+
+
+def test_rename_to_existing_username_conflicts(super_admin_client, user_a, user_b):
+    r = super_admin_client.patch(f"/users/{user_a.id}", json={"username": user_b.username})
+    assert r.status_code == 409
+
+
+def test_rename_to_invalid_username_rejected(super_admin_client, user_a):
+    r = super_admin_client.patch(f"/users/{user_a.id}", json={"username": "com espaco"})
+    assert r.status_code == 400
+
+
 def test_protected_account_cannot_be_deleted_or_modified(super_admin_client, super_admin_user):
     r = super_admin_client.delete(f"/users/{super_admin_user.id}")
     assert r.status_code in (400, 403)  # 400 se for a própria conta, 403 se protegida — aqui é as duas coisas

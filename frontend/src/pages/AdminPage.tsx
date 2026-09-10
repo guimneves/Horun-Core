@@ -14,6 +14,18 @@ import { Avatar } from '../components/Avatar'
 const TABS = ['Usuários', 'Módulos', 'Equipamentos', 'Permissões'] as const
 type Tab = (typeof TABS)[number]
 
+// Nome de usuário tem que ser um slug (sem espaço, sem acento) — senão a
+// menção `@usuario` quebra no espaço e a pessoa não é notificada.
+function slugifyUsername(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // tira acento
+    .replace(/\s+/g, '.')
+    .replace(/[^a-z0-9._-]/g, '')
+    .replace(/\.{2,}/g, '.')
+}
+
 function Table({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -183,6 +195,23 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
     onChange()
   }
 
+  async function handleRename(u: CurrentUser) {
+    const raw = window.prompt(
+      `Novo nome de usuário para "${u.display_name || u.username}" (sem espaço, sem acento):`,
+      u.username,
+    )
+    if (!raw) return
+    const next = slugifyUsername(raw)
+    if (!next || next === u.username) return
+    setError(null)
+    try {
+      await api.updateUser(u.id, { username: next })
+      onChange()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível renomear.')
+    }
+  }
+
   return (
     <div className="flex gap-5">
       <div className="flex-1">
@@ -236,7 +265,12 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 <Td>
                   <div className="flex items-center gap-2.5">
                     <Avatar name={u.display_name || u.username} size={30} userId={u.id} />
-                    <span className="font-medium">{u.display_name || u.username}</span>
+                    <div className="min-w-0">
+                      <div className="font-medium">{u.display_name || u.username}</div>
+                      <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                        @{u.username}
+                      </div>
+                    </div>
                   </div>
                 </Td>
                 <Td>
@@ -292,6 +326,11 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 <Td right>
                   <div className="flex items-center justify-end gap-3">
                     {!u.is_protected && (
+                      <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
+                        renomear
+                      </button>
+                    )}
+                    {!u.is_protected && (
                       <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
                         {u.setup_code ? 'ver código' : 'gerar novo acesso'}
                       </button>
@@ -310,7 +349,15 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
       </div>
 
       <CreatePanel title="Novo usuário">
-        <FieldInput label="Usuário" placeholder="usuario.sobrenome" value={username} onChange={(e) => setUsername(e.target.value)} />
+        <FieldInput
+          label="Usuário"
+          placeholder="usuario.sobrenome"
+          value={username}
+          onChange={(e) => setUsername(slugifyUsername(e.target.value))}
+        />
+        <p className="-mt-2 mb-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+          Sem espaço e sem acento — é o que a pessoa digita pra entrar e o que vai depois do @ nas menções.
+        </p>
         <FieldInput
           label="Senha provisória (opcional)"
           type="password"
