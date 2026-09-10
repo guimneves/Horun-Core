@@ -172,3 +172,32 @@ def test_user_marks_onboarding_done(user_a_client):
     assert r.status_code == 200
     assert r.json()["onboarded"] is True
     assert user_a_client.get("/auth/me").json()["onboarded"] is True
+
+
+def test_out_coerces_null_legacy_columns():
+    """Conta criada antes das colunas de perfil existirem fica com NULL no
+    Postgres (a coluna migrada é nullable, ao contrário de uma instalação
+    nova). `_out` não pode deixar isso derrubar o login com 500 — bug real
+    em produção 2026-09-10."""
+    from app.api.routes_auth import _out
+    from app.db.models import User
+
+    u = User(
+        id=1,
+        username="antiga",
+        display_name=None,
+        full_name=None,
+        email=None,
+        phone=None,
+        position=None,
+        qualification=None,
+        onboarded=None,
+    )
+    out = _out(u)
+    assert out.full_name == ""
+    assert out.email == ""
+    assert out.phone == ""
+    assert out.position == ""
+    assert out.qualification == ""
+    assert out.display_name == ""
+    assert out.onboarded is False

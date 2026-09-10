@@ -105,19 +105,23 @@ class UpdateProfileRequest(BaseModel):
 
 
 def _out(user: User) -> UserOut:
+    # `or ""` de defesa: uma conta antiga cuja coluna de texto ficou NULL
+    # (criada antes da coluna existir) não pode derrubar o login inteiro
+    # com 500 — a migração já faz o backfill, isto é só o cinto de
+    # segurança da rota mais crítica.
     return UserOut(
         id=user.id,
         username=user.username,
-        display_name=user.display_name,
-        full_name=user.full_name,
-        email=user.email,
-        phone=user.phone,
-        position=user.position,
-        qualification=user.qualification,
+        display_name=user.display_name or "",
+        full_name=user.full_name or "",
+        email=user.email or "",
+        phone=user.phone or "",
+        position=user.position or "",
+        qualification=user.qualification or "",
         has_photo=user.photo is not None,
         is_super_admin=user.is_super_admin,
         is_protected=user.is_protected,
-        onboarded=user.onboarded,
+        onboarded=bool(user.onboarded),
         setup_code=user.setup_code,
     )
 
@@ -291,11 +295,11 @@ def users_directory(current: CurrentUser, session: SessionDep):
         DirectoryEntryOut(
             id=u.id,
             name=u.full_name or u.display_name or u.username,
-            position=u.position,
-            qualification=u.qualification,
-            email=u.email,
+            position=u.position or "",
+            qualification=u.qualification or "",
+            email=u.email or "",
             has_photo=u.photo is not None,
-            phone=u.phone if current.is_super_admin else "",
+            phone=(u.phone or "") if current.is_super_admin else "",
         )
         for u in users
     ]

@@ -36,6 +36,24 @@ def _ensure_column(table: str, column: str, ddl_type: str) -> None:
         conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
 
 
+_USER_TEXT_COLUMNS = ("full_name", "email", "phone", "position", "qualification", "display_name")
+
+
+def _backfill_null_text(table: str, columns: tuple[str, ...]) -> None:
+    """Contas criadas antes destas colunas existirem ficam com NULL; o
+    modelo e as respostas da API (`UserOut`, etc.) esperam string, e um
+    NULL derruba o login inteiro com 500. Idempotente — o WHERE faz virar
+    no-op assim que não há mais nada pra consertar."""
+    existing = {c["name"] for c in inspect(engine).get_columns(table)}
+    cols = [c for c in columns if c in existing]
+    if not cols:
+        return
+    set_clause = ", ".join(f"{c} = COALESCE({c}, '')" for c in cols)
+    where_clause = " OR ".join(f"{c} IS NULL" for c in cols)
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f'UPDATE "{table}" SET {set_clause} WHERE {where_clause}')
+
+
 def _run_migrations() -> None:
     _ensure_column("user", "full_name", "VARCHAR")
     _ensure_column("user", "email", "VARCHAR")
@@ -45,6 +63,7 @@ def _run_migrations() -> None:
     _ensure_column("user", "photo", "BYTEA" if engine.dialect.name == "postgresql" else "BLOB")
     _ensure_column("user", "photo_content_type", "VARCHAR")
     _ensure_column("user", "setup_code", "VARCHAR")
+    _backfill_null_text("user", _USER_TEXT_COLUMNS)
     # DEFAULT TRUE: as contas que já existiam quando a coluna foi criada
     # não passam pelo onboarding (só as criadas depois, que nascem False
     # pelo default do modelo Python).
