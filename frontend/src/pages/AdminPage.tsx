@@ -6,12 +6,14 @@ import {
   QUALIFICATIONS,
   type CurrentUser,
   type Equipment,
+  type Group,
+  type GroupMember,
   type ModuleAccessEntry,
   type ModuleFull,
 } from '../api/client'
 import { Avatar } from '../components/Avatar'
 
-const TABS = ['Usuários', 'Módulos', 'Equipamentos', 'Permissões'] as const
+const TABS = ['Usuários', 'Grupos', 'Módulos', 'Equipamentos', 'Permissões'] as const
 type Tab = (typeof TABS)[number]
 
 // Nome de usuário tem que ser um slug (sem espaço, sem acento) — senão a
@@ -613,6 +615,194 @@ function PermissionsTab({ modules, users }: { modules: ModuleFull[]; users: Curr
   )
 }
 
+function GroupsTab({ users }: { users: CurrentUser[] }) {
+  const [groups, setGroups] = useState<Group[]>([])
+  const [selected, setSelected] = useState<Group | null>(null)
+  const [members, setMembers] = useState<GroupMember[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  const [name, setName] = useState('')
+  const [color, setColor] = useState('#5c6bc4')
+  const [adminId, setAdminId] = useState<number | ''>('')
+
+  const admins = users.filter((u) => u.is_super_admin)
+
+  function reload() {
+    api.listGroups().then(setGroups)
+  }
+  useEffect(reload, [])
+
+  useEffect(() => {
+    if (selected) api.listGroupMembers(selected.id).then(setMembers).catch(() => setMembers([]))
+    else setMembers([])
+  }, [selected])
+
+  async function handleCreate() {
+    setError(null)
+    if (!name.trim() || !adminId) {
+      setError('Nome e admin interno são obrigatórios.')
+      return
+    }
+    try {
+      await api.createGroup({ name, color, internal_admin_id: Number(adminId) })
+      setName('')
+      setAdminId('')
+      reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao criar grupo.')
+    }
+  }
+
+  async function refreshSelected() {
+    const fresh = await api.listGroups()
+    setGroups(fresh)
+    setSelected((s) => fresh.find((g) => g.id === s?.id) ?? null)
+    if (selected) api.listGroupMembers(selected.id).then(setMembers).catch(() => {})
+  }
+
+  return (
+    <div className="flex gap-5">
+      <Table>
+        <thead>
+          <tr>
+            <Th>Grupo</Th>
+            <Th>Admin interno</Th>
+            <Th>Membros</Th>
+            <Th right>Ações</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) => (
+            <tr key={g.id} style={selected?.id === g.id ? { background: 'var(--color-surface)' } : undefined}>
+              <Td>
+                <button className="flex items-center gap-2.5" onClick={() => setSelected(g)}>
+                  <span className="h-3 w-3 flex-shrink-0 rounded" style={{ background: g.color }} />
+                  <span className="font-medium">{g.name}</span>
+                </button>
+              </Td>
+              <Td>{g.internal_admin_name}</Td>
+              <Td>{g.member_count}</Td>
+              <Td right>
+                <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => setSelected(g)}>
+                  gerenciar
+                </button>
+                <button
+                  className="ml-3 text-xs"
+                  style={{ color: '#d43b3b' }}
+                  onClick={() => {
+                    if (confirm(`Excluir o grupo "${g.name}"? Os avisos e eventos dele são apagados.`))
+                      api.deleteGroup(g.id).then(() => {
+                        setSelected(null)
+                        reload()
+                      })
+                  }}
+                >
+                  excluir
+                </button>
+              </Td>
+            </tr>
+          ))}
+          {groups.length === 0 && (
+            <tr>
+              <Td>
+                <span style={{ color: 'var(--color-text-muted)' }}>Nenhum grupo ainda.</span>
+              </Td>
+            </tr>
+          )}
+        </tbody>
+      </Table>
+
+      {selected ? (
+        <CreatePanel title={`Membros — ${selected.name}`}>
+          <div className="mb-3 flex flex-col gap-2">
+            {members.map((m) => (
+              <div key={m.user_id} className="flex items-center gap-2 text-[13px]">
+                <Avatar name={m.name} size={24} userId={m.user_id} />
+                <span className="flex-1 truncate">{m.name}</span>
+                {m.is_internal_admin ? (
+                  <span className="text-[11px]" style={{ color: 'var(--color-primary)' }}>admin interno</span>
+                ) : (
+                  <button
+                    className="text-[11px]"
+                    style={{ color: '#d43b3b' }}
+                    onClick={() => api.removeGroupMember(selected.id, m.user_id).then(refreshSelected)}
+                  >
+                    remover
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Adicionar</label>
+          <select
+            className="mb-3 w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            value=""
+            onChange={(e) => {
+              if (e.target.value) api.addGroupMember(selected.id, Number(e.target.value)).then(refreshSelected)
+            }}
+          >
+            <option value="">Escolher colaborador…</option>
+            {users
+              .filter((u) => !members.some((m) => m.user_id === u.id))
+              .map((u) => (
+                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              ))}
+          </select>
+
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Admin interno</label>
+          <select
+            className="mb-3 w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            value={selected.internal_admin_id}
+            onChange={(e) => api.updateGroup(selected.id, { internal_admin_id: Number(e.target.value) }).then(refreshSelected)}
+          >
+            {admins.map((u) => (
+              <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+            ))}
+          </select>
+
+          <button className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }} onClick={() => setSelected(null)}>
+            Fechar
+          </button>
+        </CreatePanel>
+      ) : (
+        <CreatePanel title="Novo grupo">
+          <FieldInput label="Nome" placeholder="ex.: Cromatografia" value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="mb-3.5">
+            <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Cor</label>
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-full rounded-lg" style={{ background: 'var(--color-surface)' }} />
+          </div>
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+            Admin interno (tem que ser administrador máximo)
+          </label>
+          <select
+            className="mb-3.5 w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            value={adminId === '' ? '' : String(adminId)}
+            onChange={(e) => setAdminId(e.target.value ? Number(e.target.value) : '')}
+          >
+            <option value="">Selecione…</option>
+            {admins.map((u) => (
+              <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+            ))}
+          </select>
+          {admins.length === 0 && (
+            <p className="-mt-2 mb-3 text-[11px]" style={{ color: '#d43b3b' }}>
+              Nenhum administrador máximo cadastrado — promova alguém em Usuários primeiro.
+            </p>
+          )}
+          {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
+          <PrimaryButton onClick={handleCreate} disabled={!name.trim() || !adminId}>
+            Criar grupo
+          </PrimaryButton>
+        </CreatePanel>
+      )}
+    </div>
+  )
+}
+
 export function AdminPage() {
   const [tab, setTab] = useState<Tab>('Usuários')
   const [modules, setModules] = useState<ModuleFull[]>([])
@@ -658,6 +848,7 @@ export function AdminPage() {
       </div>
 
       {tab === 'Usuários' && <UsersTab users={users} onChange={reloadUsers} />}
+      {tab === 'Grupos' && <GroupsTab users={users} />}
       {tab === 'Módulos' && <ModulesTab modules={modules} onChange={reloadModules} />}
       {tab === 'Equipamentos' && <EquipmentTab equipment={equipment} onChange={reloadEquipment} />}
       {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} />}

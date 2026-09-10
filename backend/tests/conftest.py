@@ -96,3 +96,13 @@ def user_b(db_engine) -> User:
 @pytest.fixture()
 def user_b_client(app_with_overrides, user_b):
     return _login(app_with_overrides, "usuario-b", "senha-b")
+
+
+@pytest.fixture()
+def admin2(db_engine) -> User:
+    return _create_user(db_engine, "admin2", "senha2", is_super_admin=True)
+
+
+@pytest.fixture()
+def admin2_client(app_with_overrides, admin2):
+    return _login(app_with_overrides, "admin2", "senha2")

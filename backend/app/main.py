@@ -12,6 +12,7 @@ from app.api import (
     routes_auth,
     routes_equipment,
     routes_events,
+    routes_groups,
     routes_modules,
     routes_notifications,
     routes_posts,
@@ -54,6 +55,7 @@ app.include_router(routes_notifications.router)
 app.include_router(routes_equipment.router)
 app.include_router(routes_reservations.router)
 app.include_router(routes_events.router)
+app.include_router(routes_groups.router)
 app.include_router(routes_search.router)
 app.include_router(routes_admin.router)
 app.include_router(routes_proxy.router)

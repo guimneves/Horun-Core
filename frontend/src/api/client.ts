@@ -194,6 +194,26 @@ export interface Birthday {
   month: number
 }
 
+export interface Group {
+  id: number
+  name: string
+  description: string
+  color: string
+  internal_admin_id: number
+  internal_admin_name: string
+  member_count: number
+  is_member: boolean
+  can_manage: boolean
+}
+
+export interface GroupMember {
+  user_id: number
+  name: string
+  has_photo: boolean
+  is_internal_admin: boolean
+  added_at: string
+}
+
 export const api = {
   login: (username: string, password: string) =>
     request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
@@ -343,4 +363,18 @@ export const api = {
 
   listBirthdays: (range: { start: string; end: string }) =>
     request<Birthday[]>(`/users/birthdays?start=${range.start}&end=${range.end}`),
+
+  listGroups: () => request<Group[]>('/groups'),
+  createGroup: (payload: { name: string; description?: string; color?: string; internal_admin_id: number }) =>
+    request<Group>('/groups', { method: 'POST', body: JSON.stringify(payload) }),
+  updateGroup: (
+    groupId: number,
+    payload: { name?: string; description?: string; color?: string; internal_admin_id?: number },
+  ) => request<Group>(`/groups/${groupId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteGroup: (groupId: number) => request<{ ok: boolean }>(`/groups/${groupId}`, { method: 'DELETE' }),
+  listGroupMembers: (groupId: number) => request<GroupMember[]>(`/groups/${groupId}/members`),
+  addGroupMember: (groupId: number, userId: number) =>
+    request<{ ok: boolean }>(`/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeGroupMember: (groupId: number, userId: number) =>
+    request<{ ok: boolean }>(`/groups/${groupId}/members/${userId}`, { method: 'DELETE' }),
 }

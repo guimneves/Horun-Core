@@ -86,10 +86,14 @@ def _run_migrations() -> None:
     _ensure_column("module", "internal_frontend_url", "VARCHAR DEFAULT ''")
     _backfill_null_text("module", ("description", "internal_frontend_url", "display_name"))
 
-    # --- post: anexos ---
+    # --- post: anexos + escopo de grupo (Fase 2) ---
     _ensure_column("post", "attachment", blob)
     _ensure_column("post", "attachment_content_type", "VARCHAR")
     _ensure_column("post", "attachment_filename", "VARCHAR")
+    _ensure_column("post", "group_id", "INTEGER")
+
+    # --- event: escopo de grupo (Fase 2) ---
+    _ensure_column("event", "group_id", "INTEGER")
 
     if is_pg:
         # SQLite não suporta esses ALTER, mas também não precisa: dev sempre

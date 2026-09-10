@@ -111,14 +111,39 @@ class UserModuleAccess(SQLModel, table=True):
     granted_at: datetime = Field(default_factory=utcnow)
 
 
+class Group(SQLModel, table=True):
+    """Grupo de colaboradores (Fase 2). Cada grupo tem um mural e eventos
+    de calendário próprios, visíveis só pros membros. O `internal_admin`
+    é o dono designado — responsável por moderar o mural do grupo e
+    criar os eventos dele; **obrigatoriamente** um super-admin do Core
+    (validado na API), então na prática é um rótulo de responsabilidade,
+    não um nível de permissão novo."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    description: str = ""
+    color: str = "#5c6bc4"
+    internal_admin_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class GroupMembership(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    added_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    added_at: datetime = Field(default_factory=utcnow)
+
+
 class Post(SQLModel, table=True):
-    """Mural/feed de avisos e lembretes entre colaboradores (seção "Mural"
-    do dashboard). Qualquer usuário autenticado pode publicar; só o
-    administrador máximo pode fixar (`pinned`) — mesmo raciocínio de
-    permissão dos outros recursos administrativos."""
+    """Mural/feed de avisos e lembretes entre colaboradores. `group_id`
+    NULL = mural do laboratório (qualquer autenticado vê e publica);
+    `group_id` preenchido = mural do grupo (só os membros). Só o
+    administrador máximo (ou o admin interno, no mural do grupo) fixa."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     author_id: int = Field(foreign_key="user.id", index=True)
+    group_id: Optional[int] = Field(default=None, foreign_key="group.id", index=True)
     content: str
     pinned: bool = Field(default=False)
     # Um anexo opcional por aviso (imagem ou PDF) — guardado no banco, mesmo
@@ -180,6 +205,9 @@ class Event(SQLModel, table=True):
     start_at: datetime
     end_at: datetime
     all_day: bool = Field(default=False)
+    # NULL = evento do laboratório (só super-admin cria, todos veem);
+    # preenchido = evento do grupo (só o admin interno cria, só membros veem).
+    group_id: Optional[int] = Field(default=None, foreign_key="group.id", index=True)
     created_by_id: int = Field(foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
 
