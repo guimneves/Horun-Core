@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError, type Equipment, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
@@ -7,7 +7,20 @@ import { toLocalIso } from '../lib/datetime'
 const START_HOUR = 8
 const END_HOUR = 19
 const ROW_HEIGHT = 56
+const HEADER_HEIGHT = 38
 const DAY_LABELS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']
+
+// Reserva sendo arrastada — posição em edição, ainda não salva. `moved`
+// distingue "só cliquei" (vira exclusão, comportamento antigo) de
+// "arrastei de verdade" (vira reagendamento) no pointerup.
+interface DragState {
+  reservationId: number
+  equipmentId: string
+  dayIndex: number
+  startFrac: number
+  durationHours: number
+  moved: boolean
+}
 
 function getMonday(base: Date): Date {
   const d = new Date(base)
@@ -160,6 +173,8 @@ export function AgendaPage() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
 
   const monday = useMemo(() => addDays(getMonday(new Date()), weekOffset * 7), [weekOffset])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday])
@@ -187,6 +202,57 @@ export function AgendaPage() {
 
   const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i)
   const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+
+  function startDrag(e: React.PointerEvent, r: Reservation, dayIndex: number, startFrac: number, durationHours: number) {
+    const canMove = r.user_id === user?.id || user?.is_super_admin
+    if (!canMove) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ reservationId: r.id, equipmentId: r.equipment_id, dayIndex, startFrac, durationHours, moved: false })
+  }
+
+  function onDragMove(e: React.PointerEvent, r: Reservation) {
+    if (!drag || drag.reservationId !== r.id) return
+    const gridEl = gridRef.current
+    if (!gridEl) return
+    const rect = gridEl.getBoundingClientRect()
+    const dayWidth = rect.width / 7
+    const newDayIndex = Math.min(6, Math.max(0, Math.floor((e.clientX - rect.left) / dayWidth)))
+    const relY = e.clientY - rect.top - HEADER_HEIGHT
+    const rawFrac = relY / ROW_HEIGHT
+    const snapped = Math.round(rawFrac * 4) / 4 // passos de 15 min
+    const maxStart = hours.length - drag.durationHours
+    const clampedFrac = Math.min(Math.max(snapped, 0), Math.max(maxStart, 0))
+    setDrag((d) => (d ? { ...d, dayIndex: newDayIndex, startFrac: clampedFrac, moved: true } : d))
+  }
+
+  async function onDragEnd(e: React.PointerEvent, r: Reservation) {
+    if (!drag || drag.reservationId !== r.id) return
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    const finished = drag
+    setDrag(null)
+
+    if (!finished.moved) {
+      handleDelete(r)
+      return
+    }
+
+    const newStartHour = START_HOUR + finished.startFrac
+    const newStart = new Date(days[finished.dayIndex])
+    newStart.setHours(Math.floor(newStartHour), Math.round((newStartHour % 1) * 60), 0, 0)
+    const newEnd = new Date(newStart.getTime() + finished.durationHours * 3600 * 1000)
+
+    try {
+      await api.moveReservation(r.id, {
+        equipment_id: r.equipment_id,
+        start_at: toLocalIso(newStart),
+        end_at: toLocalIso(newEnd),
+      })
+      reload()
+    } catch (err) {
+      alert(err instanceof ApiError ? err.message : 'Não foi possível mover a reserva.')
+      reload() // desfaz visualmente — a grade volta a refletir o servidor
+    }
+  }
 
   return (
     <div className="flex h-full">
@@ -229,10 +295,13 @@ export function AgendaPage() {
             ))}
           </div>
 
-          <div className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
+          <div ref={gridRef} className="grid flex-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
             {days.map((day, dayIndex) => {
               const today = isSameDay(day, new Date())
-              const dayReservations = reservations.filter((r) => isSameDay(new Date(r.start_at), day))
+              const dayReservations = reservations.filter((r) => {
+                if (drag && drag.reservationId === r.id) return drag.dayIndex === dayIndex
+                return isSameDay(new Date(r.start_at), day)
+              })
               return (
                 <div
                   key={dayIndex}
@@ -263,24 +332,39 @@ export function AgendaPage() {
                     ))}
 
                     {dayReservations.map((r) => {
-                      const s = new Date(r.start_at)
-                      const e = new Date(r.end_at)
-                      const startFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
-                      const endFrac = e.getHours() + e.getMinutes() / 60 - START_HOUR
+                      const isDragging = drag?.reservationId === r.id
+                      let startFrac: number
+                      let endFrac: number
+                      if (isDragging && drag) {
+                        startFrac = drag.startFrac
+                        endFrac = drag.startFrac + drag.durationHours
+                      } else {
+                        const s = new Date(r.start_at)
+                        const e = new Date(r.end_at)
+                        startFrac = s.getHours() + s.getMinutes() / 60 - START_HOUR
+                        endFrac = e.getHours() + e.getMinutes() / 60 - START_HOUR
+                      }
                       const eq = equipmentById.get(r.equipment_id)
-                      const canDelete = r.user_id === user?.id || user?.is_super_admin
+                      const canMove = r.user_id === user?.id || user?.is_super_admin
                       return (
                         <div
                           key={r.id}
-                          onClick={() => canDelete && handleDelete(r)}
+                          onPointerDown={(e) => startDrag(e, r, dayIndex, startFrac, endFrac - startFrac)}
+                          onPointerMove={(e) => onDragMove(e, r)}
+                          onPointerUp={(e) => onDragEnd(e, r)}
                           className="absolute left-[3px] right-[3px] overflow-hidden rounded-md px-2 py-1.5"
                           style={{
                             top: startFrac * ROW_HEIGHT + 2,
                             height: Math.max((endFrac - startFrac) * ROW_HEIGHT - 4, 22),
                             background: eq?.color ?? 'var(--color-primary)',
-                            cursor: canDelete ? 'pointer' : 'default',
+                            cursor: canMove ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                            touchAction: 'none',
+                            userSelect: 'none',
+                            boxShadow: isDragging ? '0 4px 14px rgba(0,0,0,0.35)' : undefined,
+                            zIndex: isDragging ? 10 : undefined,
+                            opacity: isDragging ? 0.9 : 1,
                           }}
-                          title={canDelete ? 'Clique para cancelar' : undefined}
+                          title={canMove ? 'Arraste para reagendar, clique para cancelar' : undefined}
                         >
                           <div className="truncate text-[11px] font-semibold text-white">{eq?.display_name ?? r.equipment_id}</div>
                           <div className="truncate text-[10.5px]" style={{ color: 'rgba(255,255,255,0.78)' }}>

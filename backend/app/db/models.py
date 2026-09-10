@@ -79,6 +79,17 @@ class Post(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class PostReply(SQLModel, table=True):
+    """Resposta a um post do mural — thread simples (sem resposta a
+    resposta, um nível só, suficiente para o uso de avisos/lembretes)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    post_id: int = Field(foreign_key="post.id", index=True)
+    author_id: int = Field(foreign_key="user.id", index=True)
+    content: str
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Equipment(SQLModel, table=True):
     """Equipamento reservável na Agenda — conceito separado de `Module`:
     nem todo equipamento tem módulo de software (ex. balança analítica), e

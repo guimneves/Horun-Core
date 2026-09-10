@@ -24,6 +24,16 @@ class ReservationIn(BaseModel):
     end_at: datetime
 
 
+class ReservationMoveIn(BaseModel):
+    """Corpo do PATCH usado ao arrastar um bloco na Agenda — só os dois
+    campos que uma arrastada muda (dia/hora); trocar de equipamento
+    arrastando pra outra coluna também usa isto."""
+
+    equipment_id: str
+    start_at: datetime
+    end_at: datetime
+
+
 class ReservationOut(BaseModel):
     id: int
     equipment_id: str
@@ -110,6 +120,38 @@ def create_reservation(payload: ReservationIn, user: CurrentUser, session: Sessi
         start_at=payload.start_at,
         end_at=payload.end_at,
     )
+    session.add(reservation)
+    session.commit()
+    session.refresh(reservation)
+    return _out(reservation, user)
+
+
+@router.patch("/reservations/{reservation_id}", response_model=ReservationOut)
+def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: CurrentUser, session: SessionDep):
+    """Reagendar uma reserva (arrastar na grade da Agenda) — mesmas regras
+    de validação do create_reservation, mas ignorando a própria reserva na
+    checagem de conflito (senão ela sempre "conflitaria com ela mesma")."""
+    reservation = session.get(Reservation, reservation_id)
+    if reservation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reserva não encontrada")
+    if reservation.user_id != user.id and not user.is_super_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem reservou ou o administrador máximo pode reagendar")
+
+    if payload.end_at <= payload.start_at:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim da reserva precisa ser depois do início")
+
+    equipment = session.get(Equipment, payload.equipment_id)
+    if equipment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+
+    if _has_conflict(session, payload.equipment_id, payload.start_at, payload.end_at, exclude_id=reservation_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Já existe uma reserva desse equipamento nesse horário"
+        )
+
+    reservation.equipment_id = payload.equipment_id
+    reservation.start_at = payload.start_at
+    reservation.end_at = payload.end_at
     session.add(reservation)
     session.commit()
     session.refresh(reservation)

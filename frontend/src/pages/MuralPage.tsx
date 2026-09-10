@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 import { PinIcon } from '../icons'
 import { toLocalIso } from '../lib/datetime'
+import { MentionTextarea, renderWithMentions } from '../components/MentionTextarea'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime()
@@ -41,10 +42,10 @@ function Composer({ onPosted }: { onPosted: () => void }) {
     >
       <Avatar name={user?.display_name || user?.username || '?'} size={36} />
       <div className="flex-1">
-        <textarea
+        <MentionTextarea
           value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Deixe um aviso ou lembrete para a equipe…"
+          onChange={setContent}
+          placeholder="Deixe um aviso ou lembrete para a equipe… use @ para marcar alguém"
           rows={2}
           className="mb-2.5 w-full resize-none rounded-[10px] px-3.5 py-2.5 text-sm outline-none"
           style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
@@ -60,6 +61,98 @@ function Composer({ onPosted }: { onPosted: () => void }) {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]; postId: number; onChanged: () => void }) {
+  const { user } = useAuth()
+  const canDelete = user?.is_super_admin || user?.id === reply.author_id
+  return (
+    <div className="flex gap-2.5">
+      <Avatar name={reply.author_display_name} size={26} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[12.5px] font-semibold">{reply.author_display_name}</span>
+          <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+            · {timeAgo(reply.created_at)}
+          </span>
+          {canDelete && (
+            <button
+              className="ml-auto text-[11px]"
+              style={{ color: '#d43b3b' }}
+              onClick={() => api.deleteReply(postId, reply.id).then(onChanged)}
+            >
+              remover
+            </button>
+          )}
+        </div>
+        <p className="text-[13px] leading-relaxed">{renderWithMentions(reply.content)}</p>
+      </div>
+    </div>
+  )
+}
+
+function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [content, setContent] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function handleReply() {
+    if (!content.trim()) return
+    setBusy(true)
+    try {
+      await api.createReply(post.id, content.trim())
+      setContent('')
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--color-border)' }}>
+      {post.replies.length > 0 && (
+        <div className="mb-3 flex flex-col gap-3">
+          {post.replies.map((r) => (
+            <ReplyRow key={r.id} reply={r} postId={post.id} onChanged={onChanged} />
+          ))}
+        </div>
+      )}
+
+      {open ? (
+        <div className="flex items-start gap-2.5">
+          <Avatar name="" size={26} />
+          <div className="flex-1">
+            <MentionTextarea
+              value={content}
+              onChange={setContent}
+              placeholder="Escreva uma resposta… use @ para marcar alguém"
+              rows={1}
+              autoFocus
+              className="mb-2 w-full resize-none rounded-lg px-3 py-1.5 text-[13px] outline-none"
+              style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            />
+            <div className="flex justify-end gap-2">
+              <button className="text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(false)}>
+                cancelar
+              </button>
+              <button
+                onClick={handleReply}
+                disabled={busy || !content.trim()}
+                className="rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+              >
+                Responder
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button className="text-[12.5px] font-medium" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(true)}>
+          Responder{post.replies.length > 0 ? ` (${post.replies.length})` : ''}
+        </button>
+      )}
     </div>
   )
 }
@@ -119,9 +212,10 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
               </button>
             )}
           </div>
-          <p className="mt-1.5 text-sm leading-relaxed">{post.content}</p>
+          <p className="mt-1.5 text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
         </div>
       </div>
+      <ReplyThread post={post} onChanged={onChanged} />
     </div>
   )
 }

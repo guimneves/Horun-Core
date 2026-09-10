@@ -70,6 +70,16 @@ export interface ModuleAccessEntry {
   username: string
 }
 
+export interface PostReply {
+  id: number
+  post_id: number
+  content: string
+  created_at: string
+  author_id: number
+  author_username: string
+  author_display_name: string
+}
+
 export interface Post {
   id: number
   content: string
@@ -78,6 +88,13 @@ export interface Post {
   author_id: number
   author_username: string
   author_display_name: string
+  replies: PostReply[]
+}
+
+export interface MentionableUser {
+  id: number
+  username: string
+  display_name: string
 }
 
 export interface Equipment {
@@ -126,6 +143,13 @@ export const api = {
     request<Post>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
   deletePost: (postId: number) => request<{ ok: boolean }>(`/posts/${postId}`, { method: 'DELETE' }),
 
+  createReply: (postId: number, content: string) =>
+    request<PostReply>(`/posts/${postId}/replies`, { method: 'POST', body: JSON.stringify({ content }) }),
+  deleteReply: (postId: number, replyId: number) =>
+    request<{ ok: boolean }>(`/posts/${postId}/replies/${replyId}`, { method: 'DELETE' }),
+
+  listMentionableUsers: () => request<MentionableUser[]>('/users/mentionable'),
+
   listEquipment: () => request<Equipment[]>('/equipment'),
   createEquipment: (payload: Equipment) =>
     request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
@@ -136,6 +160,8 @@ export const api = {
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),
   createReservation: (payload: { equipment_id: string; title?: string; start_at: string; end_at: string }) =>
     request<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(payload) }),
+  moveReservation: (reservationId: number, payload: { equipment_id: string; start_at: string; end_at: string }) =>
+    request<Reservation>(`/reservations/${reservationId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteReservation: (reservationId: number) =>
     request<{ ok: boolean }>(`/reservations/${reservationId}`, { method: 'DELETE' }),
 }
