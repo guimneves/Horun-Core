@@ -113,6 +113,12 @@ Pedido do usuário: o Horun (Core e/ou módulos específicos) deve conseguir gra
   - Frontend: `components/NotificationsBell.tsx` no `Shell` (`App.tsx`) — badge com a contagem, polling de 45s, painel com clique-fora pra fechar. Abrir o painel marca tudo como lido (padrão GitHub: "novidades desde a última vez"). Clicar numa notificação navega pro `link`. `timeAgo` movido de `MuralPage.tsx` para `lib/datetime.ts` (reaproveitado).
   - 10 testes novos (`tests/test_notifications.py`), 89 no total. Validado de ponta a ponta no navegador (menção e resposta gerando notificação, badge, marcar como lida, navegação).
 
+- **Diretório de colaboradores + seletor de @menção + marca visual — implementado em 2026-09-10**:
+  - **Diretório** (`/colaboradores`, `GET /users/directory`, aberto a qualquer autenticado): grade de cartões com foto, nome (`full_name` ou `display_name`), cargo, qualificação e e-mail — **públicos**. **Telefone só aparece pro administrador máximo** (pedido do usuário); a rota zera o campo pros demais. `username`/papel/status nunca são expostos aqui. Busca por nome/cargo/qualificação. 6 testes novos (`tests/test_directory.py`).
+  - **Seletor de @menção**: digitar "@" sozinho agora abre a **lista inteira de colaboradores**, rolável (antes: só 6 sem rolagem), ordenada por nome; item destacado entra em vista ao navegar com as setas.
+  - **Marca visual**: `horun_icon.ico` → favicon + ícone ao lado de "Horun" no cabeçalho; `LOGO_NQTR_transparente.png` → logo institucional discreta (opacity 70%) no canto superior direito. Assets em `frontend/src/assets` e `frontend/public` (originais também versionados na raiz).
+  - 95 testes no total, todos passando. Validado no navegador (diretório como admin vs. colega comum — telefone só pro admin; @menção abrindo a lista toda; favicon e logos carregando).
+
 **Ainda não implementado**:
 
 1. **Plugar de verdade os módulos da Juliana (Amostras, Reagentes)** — ela precisa aplicar os 3 ajustes de `Prompt_Horun_Modulo.md` seção 6 (patch pequeno, já validado localmente pelo Guilherme numa cópia do `Controle-Analitico`) e adicionar o serviço de frontend ao `docker-compose.yml` dela (hoje comentado/ausente); depois é só registrar os dois módulos no Core (`internal_base_url` + `internal_frontend_url`) e conceder acesso.
@@ -123,6 +129,5 @@ Pedido do usuário: o Horun (Core e/ou módulos específicos) deve conseguir gra
 6. **Certificado confiável (fim do aviso self-signed)** — decisão em aberto, esperando alinhamento com a coordenação (2026-09-10). Caminho preferido ("A2"): domínio próprio barato (`.org`/`.com`/`.com.br`, ~R$ 40–70/ano) + DNS na Cloudflare + certificado Let's Encrypt via desafio **DNS-01** (sem abrir porta pra internet, só saída HTTPS da caixa; registro A público `horun.<domínio>` → `192.168.31.171`, IP privado em DNS público é ok). Alternativa sem custo: `dedyn.io` grátis da deSEC. Alternativa "correta pra domínio Windows": CA interna distribuída por GPO no `nqtrmaster` (1 registro DNS + 1 GPO). O frontend não muda (já é same-origin `/api`); a mudança é `deploy/Dockerfile` (Caddy com plugin de DNS via `xcaddy`) + `deploy/Caddyfile` (site nomeado, mantendo o IP como fallback self-signed) + 3 variáveis no `.env`.
    - **Rede**: os PCs do dia a dia do laboratório (todos no Wi-Fi) **já alcançam** `192.168.31.171` — não há isolamento de clientes global. Um PC pessoal "de fora" no mesmo Wi-Fi é barrado individualmente (controle de acesso por dispositivo no roteador); acesso de aparelho pessoal é ajuste de roteador, separado e opcional.
 7. **Busca de verdade** — a caixa de busca do topo é placeholder. Buscar no Mural, equipamentos, módulos e pessoas.
-8. **Diretório de colaboradores** (`/colaboradores`) — lista com foto/posição/qualificação/contato, aproveitando os dados de perfil. Pequeno, alto retorno.
-9. **Anexos no Mural** (imagem/PDF num aviso) — mesmo padrão do upload de foto de perfil.
-10. **Onboarding no 1º login** — "complete seu perfil (foto, telefone)" logo após definir a senha, pra o diretório (#8) não nascer vazio.
+8. **Anexos no Mural** (imagem/PDF num aviso) — mesmo padrão do upload de foto de perfil.
+9. **Onboarding no 1º login** — "complete seu perfil (foto, telefone)" logo após definir a senha, pra o diretório de colaboradores não nascer vazio.

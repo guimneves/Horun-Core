@@ -119,6 +119,16 @@ export interface MentionableUser {
   display_name: string
 }
 
+export interface DirectoryEntry {
+  id: number
+  name: string
+  position: string
+  qualification: string
+  email: string
+  has_photo: boolean
+  phone: string // "" para quem não é administrador máximo
+}
+
 export interface Notification {
   id: number
   kind: 'mention' | 'reply' | string
@@ -176,6 +186,7 @@ export const api = {
   deleteMyPhoto: () => request<CurrentUser>('/auth/me/photo', { method: 'DELETE' }),
 
   listUsers: () => request<CurrentUser[]>('/users'),
+  usersDirectory: () => request<DirectoryEntry[]>('/users/directory'),
   createUser: (payload: {
     username: string
     password?: string

@@ -9,9 +9,10 @@ import { ModulesPage } from './pages/ModulesPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { ColaboradoresPage } from './pages/ColaboradoresPage'
 import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
-import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon } from './icons'
+import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon, PeopleIcon } from './icons'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
 
@@ -80,6 +81,10 @@ function SideNav() {
         <NavLink to="/agenda" className={navLinkClass} style={navLinkStyle}>
           <AgendaIcon />
           Agenda
+        </NavLink>
+        <NavLink to="/colaboradores" className={navLinkClass} style={navLinkStyle}>
+          <PeopleIcon />
+          Colaboradores
         </NavLink>
 
         {user?.is_super_admin && (
@@ -214,6 +219,16 @@ export default function App() {
               <RequireAuth>
                 <Shell>
                   <ProfilePage />
+                </Shell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/colaboradores"
+            element={
+              <RequireAuth>
+                <Shell>
+                  <ColaboradoresPage />
                 </Shell>
               </RequireAuth>
             }

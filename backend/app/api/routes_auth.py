@@ -265,6 +265,37 @@ def list_users(_admin: SuperAdminUser, session: SessionDep):
     return [_out(u) for u in users]
 
 
+class DirectoryEntryOut(BaseModel):
+    """Diretório de colaboradores — aberto a qualquer autenticado. Só
+    nome/cargo/qualificação/e-mail são públicos; telefone só aparece pro
+    administrador máximo (pedido do usuário)."""
+
+    id: int
+    name: str  # full_name se preenchido, senão display_name
+    position: str
+    qualification: str
+    email: str
+    has_photo: bool
+    phone: str  # "" para quem não é administrador máximo
+
+
+@router.get("/users/directory", response_model=list[DirectoryEntryOut])
+def users_directory(current: CurrentUser, session: SessionDep):
+    users = session.exec(select(User).order_by(User.display_name)).all()
+    return [
+        DirectoryEntryOut(
+            id=u.id,
+            name=u.full_name or u.display_name or u.username,
+            position=u.position,
+            qualification=u.qualification,
+            email=u.email,
+            has_photo=u.photo is not None,
+            phone=u.phone if current.is_super_admin else "",
+        )
+        for u in users
+    ]
+
+
 @router.patch("/users/{user_id}", response_model=UserOut)
 def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser, session: SessionDep):
     user = session.get(User, user_id)
