@@ -45,6 +45,7 @@ export function MentionTextarea({
   autoFocus?: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const [users, setUsers] = useState<MentionableUser[]>([])
   const [query, setQuery] = useState<string | null>(null) // null = fechado
   const [highlighted, setHighlighted] = useState(0)
@@ -55,9 +56,20 @@ export function MentionTextarea({
 
   const matches = useMemo(() => {
     if (query === null) return []
-    const q = query.toLowerCase()
-    return users.filter((u) => u.username.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q)).slice(0, 6)
+    const q = query.toLowerCase().trim()
+    const list = q
+      ? users.filter((u) => u.username.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q))
+      : users
+    // Ordena por nome de exibição — "@" sozinho abre a lista inteira de
+    // colaboradores pra escolher, rolável (ver o container abaixo).
+    return [...list].sort((a, b) => a.display_name.localeCompare(b.display_name, 'pt-BR')).slice(0, 50)
   }, [query, users])
+
+  // Mantém o item destacado visível ao navegar com as setas.
+  useEffect(() => {
+    const el = listRef.current?.children[highlighted] as HTMLElement | undefined
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [highlighted])
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const text = e.target.value
@@ -93,7 +105,12 @@ export function MentionTextarea({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (query === null || matches.length === 0) return
+    if (query === null) return
+    if (e.key === 'Escape') {
+      setQuery(null)
+      return
+    }
+    if (matches.length === 0) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setHighlighted((h) => (h + 1) % matches.length)
@@ -103,8 +120,6 @@ export function MentionTextarea({
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault()
       insertMention(matches[highlighted].username)
-    } else if (e.key === 'Escape') {
-      setQuery(null)
     }
   }
 
@@ -122,29 +137,37 @@ export function MentionTextarea({
         className={className}
         style={style}
       />
-      {query !== null && matches.length > 0 && (
+      {query !== null && (
         <div
-          className="absolute left-0 top-full z-10 mt-1 w-64 overflow-hidden rounded-lg border shadow-md"
+          className="absolute left-0 top-full z-10 mt-1 w-72 overflow-hidden rounded-lg border shadow-md"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
-          {matches.map((u, i) => (
-            <button
-              key={u.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => insertMention(u.username)}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
-              style={{ background: i === highlighted ? 'var(--color-surface)' : 'transparent' }}
-            >
-              <Avatar name={u.display_name} size={24} userId={u.id} />
-              <div>
-                <div className="font-medium">{u.display_name}</div>
-                <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                  @{u.username}
+          <div ref={listRef} className="max-h-56 overflow-y-auto">
+            {matches.map((u, i) => (
+              <button
+                key={u.id}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insertMention(u.username)}
+                onMouseEnter={() => setHighlighted(i)}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                style={{ background: i === highlighted ? 'var(--color-surface)' : 'transparent' }}
+              >
+                <Avatar name={u.display_name} size={24} userId={u.id} />
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{u.display_name}</div>
+                  <div className="truncate text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    @{u.username}
+                  </div>
                 </div>
+              </button>
+            ))}
+            {matches.length === 0 && (
+              <div className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                Nenhum colaborador encontrado
               </div>
-            </button>
-          ))}
+            )}
+          </div>
         </div>
       )}
     </div>
