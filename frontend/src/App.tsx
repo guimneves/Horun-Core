@@ -12,6 +12,8 @@ import { ProfilePage } from './pages/ProfilePage'
 import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
 import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, SearchIcon } from './icons'
+import horunIcon from './assets/horun-icon.png'
+import nqtrLogo from './assets/nqtr-logo.png'
 
 const NAV_ITEMS = [{ to: '/', label: 'Mural', icon: MuralIcon, end: true }]
 
@@ -115,7 +117,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         className="flex h-16 flex-shrink-0 items-center justify-between px-6"
         style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg-elevated)' }}
       >
-        <Link to="/" className="flex items-center gap-2 text-[17px] font-semibold" style={{ color: 'var(--color-primary)' }}>
+        <Link to="/" className="flex items-center gap-2.5 text-[17px] font-semibold" style={{ color: 'var(--color-primary)' }}>
+          <img src={horunIcon} alt="" className="h-7 w-7 rounded-[7px]" />
           Horun
         </Link>
 
@@ -137,6 +140,8 @@ function Shell({ children }: { children: React.ReactNode }) {
               Sair
             </button>
           )}
+          {/* Marca institucional — NQTR/IQ-UFRJ, no canto superior, discreta. */}
+          <img src={nqtrLogo} alt="NQTR · IQ-UFRJ" className="ml-1 h-7 w-auto opacity-70" />
         </div>
       </header>
 
