@@ -29,12 +29,15 @@ Extraída do que o RE7S já implementa (`Rock Eval Horun Dev/frontend/src/index.
 - Preferência de tema **compartilhada entre módulos** (mesma chave de `localStorage`, já que tudo roda sob a mesma origem via o gateway do Core) — trocar o tema num módulo já reflete nos outros.
 - Tipografia: `system-ui, 'Segoe UI', Roboto, sans-serif` (sem fonte customizada carregada por rede — evita dependência externa e mantém consistência entre módulos sem esforço extra).
 - Tokens de cor **genéricos** (fundo, superfície, borda, texto, primária) ficam no pacote compartilhado; tokens **específicos de um módulo** (ex. as cores de status do carrossel do RE7S) continuam no CSS do próprio módulo, estendendo os tokens compartilhados.
+- Marca: ícone do Horun (`frontend/public/horun-icon.ico`) como favicon e ao lado de "Horun" no canto superior esquerdo; logo institucional do NQTR discreto no canto superior direito. Rodapé padrão (`design-system/HorunFooter`): logo NQTR + "<módulo> — um projeto Horun — <autoria>".
+
+**Codinomes internos — regra dura**: os codinomes de desenvolvimento (ex. "Ogun" pro RE7S) são **puramente internos** e **nunca** devem aparecer — em interface nenhuma, em resposta de API nenhuma, em `MODULE.md`, `README`, `pyproject`, rodapé, nem em qualquer texto que um usuário do laboratório possa ver. Não há campo de codinome no modelo `Module`, nas respostas do backend, nos tipos do frontend, nem no `HorunFooter`. Se for preciso registrar um codinome em algum lugar, que seja só numa anotação privada fora do repositório publicado.
 
 ## 3. Contrato de módulo
 
 Todo módulo compatível com o Horun deve fornecer:
 
-- Um `MODULE.md` na raiz (manifesto: id, nome público, codinome, ícone/emoji, descrição curta, porta interna) — é isso que o Core lê para cadastrar o módulo no dashboard.
+- Um `MODULE.md` na raiz (manifesto: id, nome público, ícone/emoji, descrição curta, porta interna) — é isso que o Core lê para cadastrar o módulo no dashboard. Sem codinome (ver seção 2).
 - Endpoint `GET /health` sem autenticação, respondendo `{"status": "ok"}` — usado pelo Core para o dashboard de status (seção 5).
 - Backend que aceita identidade via cabeçalhos confiáveis do Core (produção) **ou** um modo de desenvolvimento standalone com usuário fixo (`HORUN_DEV_MODE=true`) — para permitir desenvolver isolado, sem o Core rodando.
 - `Dockerfile` de backend e frontend seguindo o mesmo padrão do RE7S (`Rock Eval Horun Dev/backend/Dockerfile`, `deploy/Dockerfile`) — Python 3.11-slim + FastAPI/SQLModel no backend, Vite+React+Tailwind no frontend.

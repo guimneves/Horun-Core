@@ -352,7 +352,6 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
       await api.createModule({
         id,
         display_name: displayName,
-        codename: '',
         description: '',
         icon: '🧪',
         internal_base_url: baseUrl,

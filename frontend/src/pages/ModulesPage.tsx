@@ -29,11 +29,7 @@ export function ModulesPage() {
 
   return (
     <div className="p-6">
-      <h2 className="mb-1 text-lg font-semibold">Módulos</h2>
-      <p className="mb-6 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-        Um módulo por equipamento do laboratório. Todo usuário vê o status de todos — só quem tem
-        permissão pode abrir.
-      </p>
+      <h2 className="mb-5 text-lg font-semibold">Módulos</h2>
 
       {error && <p className="text-red-500">{error}</p>}
       {!modules && !error && <p style={{ color: 'var(--color-text-muted)' }}>Carregando…</p>}
@@ -55,11 +51,6 @@ export function ModulesPage() {
             <h3 className="font-semibold" style={{ color: 'var(--color-primary)' }}>
               Horun · {m.display_name}
             </h3>
-            {m.codename && (
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                codinome: {m.codename}
-              </p>
-            )}
             {m.description && <p className="mt-2 text-sm">{m.description}</p>}
 
             <div className="mt-4">

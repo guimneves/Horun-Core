@@ -1,7 +1,7 @@
 [project]
 name = "__MODULE_ID__"
 version = "0.1.0"
-description = "Horun · __MODULE_NAME__ — módulo do Projeto Horun (codinome __MODULE_CODENAME__)"
+description = "Horun · __MODULE_NAME__ — módulo do Projeto Horun"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

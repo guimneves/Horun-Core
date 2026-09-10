@@ -82,7 +82,6 @@ class Module(SQLModel, table=True):
     # que aparece na URL do proxy (/m/re7s/...) e no MODULE.md do módulo.
     id: str = Field(primary_key=True)
     display_name: str
-    codename: str = ""
     description: str = ""
     icon: str = "🧪"
     internal_base_url: str  # ex. "http://re7s-backend:8000" — só resolve na rede Docker do servidor

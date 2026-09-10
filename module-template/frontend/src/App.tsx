@@ -21,7 +21,7 @@ export default function App() {
           </p>
         </main>
 
-        <HorunFooter moduleName="Horun · __MODULE_NAME__" codename="__MODULE_CODENAME__" />
+        <HorunFooter moduleName="Horun · __MODULE_NAME__" />
       </div>
     </ThemeProvider>
   )

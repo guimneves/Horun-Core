@@ -7,7 +7,6 @@ def _register_module(client, module_id="re7s"):
         json={
             "id": module_id,
             "display_name": "RE7S",
-            "codename": "Ogun",
             "description": "Modulo Rock-Eval",
             "icon": "🪨",
             "internal_base_url": "http://re7s-backend:8000",

@@ -1,6 +1,6 @@
 # Horun · __MODULE_NAME__
 
-Módulo do **Projeto Horun** (codinome interno: __MODULE_CODENAME__). Gerado a partir do template padrão — ver `../Prompt_Horun_Core.md` (arquitetura da plataforma) e `../Prompt_Horun_Modulo.md` (contrato completo de módulo).
+Módulo do **Projeto Horun**. Gerado a partir do template padrão — ver `../Prompt_Horun_Core.md` (arquitetura da plataforma) e `../Prompt_Horun_Modulo.md` (contrato completo de módulo).
 
 ## Estrutura
 

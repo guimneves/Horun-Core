@@ -7,7 +7,7 @@ Passo a passo para configurar sua máquina e começar a trabalhar no Horun junto
 O Horun é a plataforma de gestão do parque analítico do laboratório NQTR (IQ-UFRJ) — um "módulo" por equipamento (Rock-Eval, LECO, etc.), todos plugados numa camada central (**Horun Core**) que cuida de login único, permissões e identidade visual. Hoje existem dois repositórios ativos:
 
 - **[Horun-Core](https://github.com/guimneves/Horun-Core)** — a plataforma em si: login, cadastro de módulos, permissões, dashboard, identidade visual compartilhada, template pra criar módulo novo. Comece lendo `Prompt_Horun_Core.md` (arquitetura) e `Prompt_Fase2.md` (infraestrutura do servidor).
-- **[RE7S-Horun](https://github.com/guimneves/RE7S-Horun)** — o módulo do Rock-Eval 7S (codinome interno: Ogun). Comece lendo `Prompt_refinado.md`.
+- **[RE7S-Horun](https://github.com/guimneves/RE7S-Horun)** — o módulo do Rock-Eval 7S. Comece lendo `Prompt_refinado.md`.
 
 Cada repositório tem seu próprio `README.md` com instruções específicas — este guia cobre o que é comum aos dois: preparar sua máquina, e como a gente trabalha em equipe pra não pisar no trabalho um do outro.
 

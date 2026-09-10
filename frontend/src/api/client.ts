@@ -68,7 +68,6 @@ export const QUALIFICATIONS = [
 export interface ModuleStatus {
   id: string
   display_name: string
-  codename: string
   description: string
   icon: string
   status: 'online' | 'offline'
@@ -79,7 +78,6 @@ export interface ModuleStatus {
 export interface ModuleFull {
   id: string
   display_name: string
-  codename: string
   description: string
   icon: string
   internal_base_url: string

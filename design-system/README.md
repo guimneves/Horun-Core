@@ -21,7 +21,7 @@ function App() {
     <ThemeProvider>
       {/* ... */}
       <ThemeToggle />
-      <HorunFooter moduleName="Horun · Meu Módulo" codename="Codinome" />
+      <HorunFooter moduleName="Horun · Meu Módulo" />
     </ThemeProvider>
   )
 }

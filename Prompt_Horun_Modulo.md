@@ -56,7 +56,6 @@ Arquivo texto simples na raiz, assim:
 
 - **id**: `<slug-minusculo-sem-espacos>`
 - **nome público**: Horun · <Nome>
-- **codinome interno**: <um nome temático, ex. divindade associada ao domínio do equipamento — opcional>
 - **descrição**: <uma frase>
 - **ícone**: <um emoji>
 - **porta interna do backend**: 8000
@@ -147,7 +146,7 @@ Use essas variáveis CSS (`var(--color-primary)` etc.) em vez de cores fixas nos
 
 **Persistência do tema**: `localStorage`, chave `"horun-theme"` (mesma chave em todo módulo — assim a escolha de tema persiste ao navegar entre módulos, já que tudo roda na mesma origem através do Core). Detecta `prefers-color-scheme` do sistema operacional só no primeiro acesso (sem preferência salva ainda).
 
-**Rodapé padrão**, em toda página: logo do laboratório (NQTR, IQ-UFRJ) + nome do módulo (formato "Horun · Nome") + codinome interno + autoria.
+**Rodapé padrão**, em toda página: logo do laboratório (NQTR, IQ-UFRJ) + nome do módulo (formato "Horun · Nome") + autoria. **Nunca** exiba codinome interno — nem no rodapé, nem em lugar nenhum da interface (ver Prompt_Horun_Core.md, seção 2).
 
 **Chamadas HTTP**: nenhuma configuração especial de CORS ou header de autenticação manual no cliente — quando plugado no Core, tudo roda na mesma origem, e a identidade chega ao backend via cabeçalho injetado pelo gateway, não pelo frontend. Em desenvolvimento standalone, o frontend fala direto com `http://localhost:8000`.
 

@@ -17,10 +17,12 @@ from app.db.models import Module, User, UserModuleAccess
 router = APIRouter(tags=["modules"])
 
 
+# Codinomes internos nunca entram nas respostas da API nem em tela
+# nenhuma — nem são guardados no banco (ver a regra no
+# Prompt_Horun_Core.md, seção 2).
 class ModuleIn(BaseModel):
     id: str
     display_name: str
-    codename: str = ""
     description: str = ""
     icon: str = "🧪"
     internal_base_url: str
@@ -31,7 +33,6 @@ class ModuleIn(BaseModel):
 class ModuleOut(BaseModel):
     id: str
     display_name: str
-    codename: str
     description: str
     icon: str
     internal_base_url: str
@@ -42,7 +43,6 @@ class ModuleOut(BaseModel):
 class ModuleStatusOut(BaseModel):
     id: str
     display_name: str
-    codename: str
     description: str
     icon: str
     status: str  # "online" | "offline"
@@ -56,7 +56,6 @@ def _out(m: Module) -> ModuleOut:
     return ModuleOut(
         id=m.id,
         display_name=m.display_name,
-        codename=m.codename,
         description=m.description,
         icon=m.icon,
         internal_base_url=m.internal_base_url,
@@ -138,7 +137,6 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
             ModuleStatusOut(
                 id=m.id,
                 display_name=m.display_name,
-                codename=m.codename,
                 description=m.description,
                 icon=m.icon,
                 status="online" if online else "offline",

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Gerador de módulo novo do Horun — copia module-template/ para uma pasta
 nova, substituindo os placeholders (__MODULE_ID__, __MODULE_NAME__,
-__MODULE_CODENAME__, __MODULE_DESCRIPTION__, __DESIGN_SYSTEM_RELATIVE_PATH__)
-pelos valores informados. Ver Prompt_Horun_Core.md (seção 3) para o
-contrato completo que o módulo gerado segue.
+__MODULE_DESCRIPTION__, __DESIGN_SYSTEM_RELATIVE_PATH__) pelos valores
+informados. Ver Prompt_Horun_Core.md (seção 3) para o contrato completo
+que o módulo gerado segue.
 
 Uso:
     python create_horun_module.py
 
 Ou sem prompts interativos:
-    python create_horun_module.py --id leco --name "Leco" --codename "Agni" \
+    python create_horun_module.py --id leco --name "Leco" \
         --description "Modulo do LECO 832 Series" \
         --dest "../Projeto Horun/Leco Horun Dev"
 """
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 TEMPLATE_DIR = HERE / "module-template"
 DESIGN_SYSTEM_DIR = HERE / "design-system"
 
-PLACEHOLDERS = ["__MODULE_ID__", "__MODULE_NAME__", "__MODULE_CODENAME__", "__MODULE_DESCRIPTION__"]
+PLACEHOLDERS = ["__MODULE_ID__", "__MODULE_NAME__", "__MODULE_DESCRIPTION__"]
 
 # Extensões tratadas como texto — tudo no template hoje é texto, mas a
 # lista evita tentar abrir um binário como UTF-8 se o template ganhar um
@@ -47,7 +47,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--id", dest="module_id", help="Id do módulo (slug), ex.: leco")
     parser.add_argument("--name", dest="module_name", help="Nome público, ex.: Leco")
-    parser.add_argument("--codename", dest="codename", help="Codinome interno, ex.: Agni")
     parser.add_argument("--description", dest="description", help="Descrição curta")
     parser.add_argument(
         "--dest",
@@ -71,7 +70,6 @@ def collect_inputs(args: argparse.Namespace) -> dict[str, str]:
     default_id = slugify(module_name)
     module_id = slugify(args.module_id or prompt("Id do módulo (slug)", default_id))
 
-    codename = args.codename or prompt("Codinome interno (ex.: Agni)", "")
     description = args.description or prompt("Descrição curta do módulo", "")
 
     default_dest = str(HERE.parent / "Projeto Horun" / f"{module_name} Horun Dev")
@@ -80,7 +78,6 @@ def collect_inputs(args: argparse.Namespace) -> dict[str, str]:
     return {
         "module_id": module_id,
         "module_name": module_name,
-        "codename": codename or "(sem codinome definido)",
         "description": description or "(descrição a preencher)",
         "dest": dest,
     }
@@ -99,7 +96,6 @@ def relative_posix(target_dir: Path, from_subdir: str) -> str:
 def replace_placeholders(text: str, values: dict[str, str]) -> str:
     text = text.replace("__MODULE_ID__", values["module_id"])
     text = text.replace("__MODULE_NAME__", values["module_name"])
-    text = text.replace("__MODULE_CODENAME__", values["codename"])
     text = text.replace("__MODULE_DESCRIPTION__", values["description"])
     text = text.replace("__DESIGN_SYSTEM_RELATIVE_PATH__", values["design_system_rel"])
     return text

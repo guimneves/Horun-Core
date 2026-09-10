@@ -70,10 +70,7 @@ export function ColaboradoresPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-1 text-xl font-semibold">Colaboradores</div>
-      <div className="mb-5 text-[13.5px]" style={{ color: 'var(--color-text-muted)' }}>
-        Quem é quem no laboratório NQTR. Telefone só aparece para a coordenação.
-      </div>
+      <div className="mb-5 text-xl font-semibold">Colaboradores</div>
 
       <div
         className="mb-5 flex w-full max-w-[360px] items-center gap-2.5 rounded-full px-3.5 py-2"

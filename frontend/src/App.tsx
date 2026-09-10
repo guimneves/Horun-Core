@@ -156,7 +156,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="flex-shrink-0">
-        <HorunFooter moduleName="Core" codename="—" />
+        <HorunFooter moduleName="Core" />
       </div>
     </div>
   )
