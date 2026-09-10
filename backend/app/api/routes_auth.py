@@ -87,6 +87,7 @@ class UserOut(BaseModel):
     birth_day: int | None
     birth_month: int | None
     birth_year: int | None
+    email_notifications: bool
     has_photo: bool
     is_super_admin: bool
     is_protected: bool
@@ -144,6 +145,7 @@ class UpdateProfileRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     onboarded: bool | None = None
+    email_notifications: bool | None = None
     # Trio de nascimento: quando `birth_set` vem True, os três valores
     # abaixo (day/month obrigatórios, year opcional) substituem o que
     # havia; quando vem False, limpa. Quando vem None (default), não mexe.
@@ -170,6 +172,7 @@ def _out(user: User) -> UserOut:
         birth_day=user.birth_day,
         birth_month=user.birth_month,
         birth_year=user.birth_year,
+        email_notifications=bool(getattr(user, "email_notifications", True)),
         has_photo=user.photo is not None,
         is_super_admin=user.is_super_admin,
         is_protected=user.is_protected,
@@ -251,6 +254,8 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
         user.phone = payload.phone
     if payload.onboarded is not None:
         user.onboarded = payload.onboarded
+    if payload.email_notifications is not None:
+        user.email_notifications = payload.email_notifications
     if payload.birth_set is True:
         _validate_birth(payload.birth_day, payload.birth_month, payload.birth_year)
         user.birth_day = payload.birth_day

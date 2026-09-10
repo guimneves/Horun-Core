@@ -45,6 +45,7 @@ export function ProfilePage() {
     month: user?.birth_month ?? null,
     year: user?.birth_year ?? null,
   })
+  const [emailNotif, setEmailNotif] = useState(user?.email_notifications ?? true)
 
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -63,7 +64,14 @@ export function ProfilePage() {
     }
     setSaving(true)
     try {
-      await api.updateProfile({ display_name: displayName, full_name: fullName, email, phone, ...birthBody })
+      await api.updateProfile({
+        display_name: displayName,
+        full_name: fullName,
+        email,
+        phone,
+        email_notifications: emailNotif,
+        ...birthBody,
+      })
       await refreshUser()
       setSavedAt(Date.now())
     } catch (err) {
@@ -157,6 +165,11 @@ export function ProfilePage() {
         <div className="mb-4">
           <BirthDateFields value={birth} onChange={setBirth} />
         </div>
+
+        <label className="mb-4 flex items-center gap-2.5 text-[13px]">
+          <input type="checkbox" checked={emailNotif} onChange={(e) => setEmailNotif(e.target.checked)} />
+          Receber notificações importantes por e-mail (menção, resposta, aniversários da semana)
+        </label>
 
         <div className="mb-4 grid grid-cols-2 gap-4">
           <div>

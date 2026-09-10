@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.email import notify_user_by_email
 from app.core.groups import can_see_group, group_member_ids
 from app.db.models import Group, Notification, Post, PostReply, User
 
@@ -68,6 +69,13 @@ def _fan_out_notifications(
         session.add(
             Notification(user_id=user_id, kind=kind, text=text, link=_mural_link(post), actor_id=actor.id)
         )
+        recipient = session.get(User, user_id)
+        if recipient is not None:
+            notify_user_by_email(
+                recipient,
+                subject=f"Horun · {text}",
+                body=f"{text}.\n\n\"{content.strip()[:400]}\"\n\nAbra o Horun para responder.",
+            )
 
 
 class CreateReplyRequest(BaseModel):

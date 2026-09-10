@@ -47,6 +47,7 @@ export interface CurrentUser {
   birth_day: number | null
   birth_month: number | null
   birth_year: number | null
+  email_notifications: boolean
   has_photo: boolean
   is_super_admin: boolean
   is_protected: boolean
@@ -236,6 +237,7 @@ export const api = {
     email?: string
     phone?: string
     onboarded?: boolean
+    email_notifications?: boolean
     birth_set?: boolean
     birth_day?: number | null
     birth_month?: number | null

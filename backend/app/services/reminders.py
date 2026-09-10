@@ -8,6 +8,7 @@ from datetime import date
 from sqlmodel import Session, select
 
 from app.core.birthdays import birthdays_between, week_bounds
+from app.core.email import notify_user_by_email
 from app.db.models import AppState, Notification, User
 from app.db.session import engine
 
@@ -55,6 +56,7 @@ def _run(session: Session, force: bool) -> int:
         session.add(
             Notification(user_id=target.id, kind="birthday_week", text=text, link="/agenda", actor_id=None)
         )
+        notify_user_by_email(target, subject="Horun · Aniversariantes da semana", body=text)
     session.commit()
     return len(users)
 

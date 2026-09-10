@@ -70,6 +70,7 @@ def _run_migrations() -> None:
     _ensure_column("user", "birth_day", "INTEGER")
     _ensure_column("user", "birth_month", "INTEGER")
     _ensure_column("user", "birth_year", "INTEGER")
+    _ensure_column("user", "email_notifications", "BOOLEAN DEFAULT TRUE")
     _backfill_null_text("user", _USER_TEXT_COLUMNS)
     # DEFAULT TRUE: as contas que já existiam quando a coluna foi criada
     # não passam pelo onboarding (só as criadas depois, que nascem False

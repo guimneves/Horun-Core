@@ -69,6 +69,10 @@ class User(SQLModel, table=True):
     birth_day: Optional[int] = None
     birth_month: Optional[int] = None
     birth_year: Optional[int] = None
+    # Recebe as notificações importantes (menção, resposta, digest
+    # semanal) também por e-mail. Precisa de `email` preenchido e do SMTP
+    # configurado no servidor.
+    email_notifications: bool = Field(default=True)
     # Foto de perfil — guardada no próprio banco (bytes), não em disco:
     # time pequeno, evita depender de um volume/servidor de arquivos
     # separado. Nunca incluída nas respostas normais de usuário (ver
