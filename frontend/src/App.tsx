@@ -15,6 +15,7 @@ import { NotificationsBell } from './components/NotificationsBell'
 import { OnboardingModal } from './components/OnboardingModal'
 import { GlobalSearch } from './components/GlobalSearch'
 import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon } from './icons'
+import { readHiddenModules, onHiddenModulesChange } from './sidebarModules'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
 
@@ -29,14 +30,20 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 function EmbeddedModulesNav() {
   const [modules, setModules] = useState<ModuleStatus[]>([])
+  const [hidden, setHidden] = useState<Set<string>>(() => readHiddenModules())
 
   useEffect(() => {
     api.dashboardModules().then(setModules).catch(() => {})
   }, [])
 
+  useEffect(() => onHiddenModulesChange(() => setHidden(readHiddenModules())), [])
+
   // Só módulos com acesso e com interface encaixada no Core — os demais
-  // continuam só visíveis na página "Módulos" (catálogo/status geral).
-  const embedded = modules.filter((m) => m.has_access && m.embeddable)
+  // continuam só visíveis na página "Módulos" (catálogo/status geral). O
+  // que sobra ainda passa pela preferência pessoal de barra lateral
+  // (ver sidebarModules.ts), pra não poluir a lista à medida que mais
+  // módulos são cadastrados.
+  const embedded = modules.filter((m) => m.has_access && m.embeddable && !hidden.has(m.id))
   if (embedded.length === 0) return null
 
   return (

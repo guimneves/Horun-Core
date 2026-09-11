@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ModuleStatus } from '../api/client'
+import { readHiddenModules, writeHiddenModules } from '../sidebarModules'
 
 function StatusBadge({ status }: { status: ModuleStatus['status'] }) {
   const online = status === 'online'
@@ -19,6 +20,7 @@ function StatusBadge({ status }: { status: ModuleStatus['status'] }) {
 export function ModulesPage() {
   const [modules, setModules] = useState<ModuleStatus[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hidden, setHidden] = useState<Set<string>>(() => readHiddenModules())
 
   useEffect(() => {
     api
@@ -27,9 +29,38 @@ export function ModulesPage() {
       .catch(() => setError('Não foi possível carregar os módulos.'))
   }, [])
 
+  function setHiddenPersisted(next: Set<string>) {
+    setHidden(next)
+    writeHiddenModules(next)
+  }
+
+  function toggleSidebar(id: string) {
+    const next = new Set(hidden)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setHiddenPersisted(next)
+  }
+
+  // Só módulos com acesso e encaixados na interface chegam a aparecer na
+  // barra lateral (ver EmbeddedModulesNav em App.tsx) — os outros não têm
+  // o que esconder ali.
+  const sidebarEligible = (modules ?? []).filter((m) => m.has_access && m.embeddable)
+
   return (
     <div className="p-6">
-      <h2 className="mb-5 text-lg font-semibold">Módulos</h2>
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Módulos</h2>
+        {sidebarEligible.length > 0 && (
+          <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            <span>Barra lateral:</span>
+            <button className="underline" onClick={() => setHiddenPersisted(new Set())}>
+              mostrar todos
+            </button>
+            <button className="underline" onClick={() => setHiddenPersisted(new Set(sidebarEligible.map((m) => m.id)))}>
+              ocultar todos
+            </button>
+          </div>
+        )}
+      </div>
 
       {error && <p className="text-red-500">{error}</p>}
       {!modules && !error && <p style={{ color: 'var(--color-text-muted)' }}>Carregando…</p>}
@@ -79,6 +110,13 @@ export function ModulesPage() {
                 </p>
               )}
             </div>
+
+            {m.has_access && m.embeddable && (
+              <label className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                <input type="checkbox" checked={!hidden.has(m.id)} onChange={() => toggleSidebar(m.id)} />
+                Mostrar na barra lateral
+              </label>
+            )}
           </div>
         ))}
       </div>
