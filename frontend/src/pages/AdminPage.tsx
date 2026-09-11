@@ -328,6 +328,15 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 <Td right>
                   <div className="flex items-center justify-end gap-3">
                     {!u.is_protected && (
+                      <button
+                        className="text-xs"
+                        style={{ color: 'var(--color-text-muted)' }}
+                        onClick={() => api.updateUser(u.id, { is_super_admin: !u.is_super_admin }).then(onChange)}
+                      >
+                        {u.is_super_admin ? 'remover admin' : 'tornar admin'}
+                      </button>
+                    )}
+                    {!u.is_protected && (
                       <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
                         renomear
                       </button>
