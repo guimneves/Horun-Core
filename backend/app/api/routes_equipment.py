@@ -6,13 +6,15 @@ app/db/models.py."""
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
-from app.db.models import Equipment, EquipmentArea, Module
+from app.db.models import Equipment, EquipmentArea, EquipmentLog, Module, User
 
 router = APIRouter(tags=["equipment"])
 
@@ -242,3 +244,108 @@ def get_equipment_photo(equipment_id: str, _user: CurrentUser, session: SessionD
     if equipment is None or equipment.photo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sem foto")
     return Response(content=equipment.photo, media_type=equipment.photo_content_type or "application/octet-stream")
+
+
+# --- Registro de uso (RUE), Fase B — manual, ainda não sincronizado com o
+# histórico interno de cada módulo (Fase C, futura) ------------------------
+
+
+class EquipmentLogIn(BaseModel):
+    description: str
+    occurred_at: datetime | None = None  # None = agora
+
+
+class EquipmentLogPatch(BaseModel):
+    description: str | None = None
+    occurred_at: datetime | None = None
+
+
+class EquipmentLogOut(BaseModel):
+    id: int
+    equipment_id: str
+    description: str
+    occurred_at: datetime
+    created_at: datetime
+    user_id: int
+    user_display_name: str
+
+
+def _log_out(log: EquipmentLog, user: User) -> EquipmentLogOut:
+    return EquipmentLogOut(
+        id=log.id,
+        equipment_id=log.equipment_id,
+        description=log.description,
+        occurred_at=log.occurred_at,
+        created_at=log.created_at,
+        user_id=user.id,
+        user_display_name=user.display_name or user.username,
+    )
+
+
+@router.get("/equipment/{equipment_id}/logs", response_model=list[EquipmentLogOut])
+def list_equipment_logs(equipment_id: str, _user: CurrentUser, session: SessionDep):
+    if session.get(Equipment, equipment_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+    logs = session.exec(
+        select(EquipmentLog).where(EquipmentLog.equipment_id == equipment_id).order_by(EquipmentLog.occurred_at.desc())
+    ).all()
+    out = []
+    for log in logs:
+        author = session.get(User, log.user_id)
+        if author is not None:
+            out.append(_log_out(log, author))
+    return out
+
+
+@router.post("/equipment/{equipment_id}/logs", response_model=EquipmentLogOut)
+def create_equipment_log(equipment_id: str, payload: EquipmentLogIn, user: CurrentUser, session: SessionDep):
+    if session.get(Equipment, equipment_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+    if not payload.description.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Descreva o que foi feito")
+    log = EquipmentLog(
+        equipment_id=equipment_id,
+        user_id=user.id,
+        description=payload.description.strip(),
+        # Naive (hora local do laboratório), mesma convenção do
+        # start_at/end_at de Reservation — não datetime.utcnow() (aware).
+        occurred_at=payload.occurred_at or datetime.now(),
+    )
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    return _log_out(log, user)
+
+
+@router.patch("/equipment/{equipment_id}/logs/{log_id}", response_model=EquipmentLogOut)
+def update_equipment_log(equipment_id: str, log_id: int, payload: EquipmentLogPatch, user: CurrentUser, session: SessionDep):
+    log = session.get(EquipmentLog, log_id)
+    if log is None or log.equipment_id != equipment_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Registro não encontrado")
+    if log.user_id != user.id and not user.is_super_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem registrou ou o administrador máximo pode editar")
+
+    if payload.description is not None:
+        if not payload.description.strip():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Descreva o que foi feito")
+        log.description = payload.description.strip()
+    if payload.occurred_at is not None:
+        log.occurred_at = payload.occurred_at
+
+    session.add(log)
+    session.commit()
+    session.refresh(log)
+    author = session.get(User, log.user_id)
+    return _log_out(log, author or user)
+
+
+@router.delete("/equipment/{equipment_id}/logs/{log_id}")
+def delete_equipment_log(equipment_id: str, log_id: int, user: CurrentUser, session: SessionDep):
+    log = session.get(EquipmentLog, log_id)
+    if log is None or log.equipment_id != equipment_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Registro não encontrado")
+    if log.user_id != user.id and not user.is_super_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem registrou ou o administrador máximo pode remover")
+    session.delete(log)
+    session.commit()
+    return {"ok": True}

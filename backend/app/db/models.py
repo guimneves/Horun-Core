@@ -249,6 +249,23 @@ class Equipment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class EquipmentLog(SQLModel, table=True):
+    """Registro de uso do equipamento (RUE) na própria página do Core —
+    Fase B, manual: quem usou anota o que fez. Não é sincronizado com o
+    histórico interno de cada módulo (RE7S etc.) ainda — isso é a Fase C,
+    combinada com o usuário como trabalho futuro."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    equipment_id: str = Field(foreign_key="equipment.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    description: str
+    # Naive (hora local do laboratório), mesma convenção do
+    # start_at/end_at de Reservation — sempre sobrescrito pela rota, este
+    # default só cobre a criação direta do objeto (ex. em teste/script).
+    occurred_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Reservation(SQLModel, table=True):
     """Reserva de uso de um equipamento por um usuário, num intervalo de
     tempo. Duas reservas do mesmo equipamento não podem se sobrepor — ver

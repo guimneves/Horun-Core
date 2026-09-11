@@ -179,6 +179,16 @@ export interface EquipmentArea {
   name: string
 }
 
+export interface EquipmentLog {
+  id: number
+  equipment_id: string
+  description: string
+  occurred_at: string
+  created_at: string
+  user_id: number
+  user_display_name: string
+}
+
 export interface Reservation {
   id: number
   equipment_id: string
@@ -405,6 +415,14 @@ export const api = {
     request<EquipmentArea>(`/equipment-areas/${areaId}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   deleteEquipmentArea: (areaId: number) =>
     request<{ ok: boolean }>(`/equipment-areas/${areaId}`, { method: 'DELETE' }),
+
+  listEquipmentLogs: (equipmentId: string) => request<EquipmentLog[]>(`/equipment/${equipmentId}/logs`),
+  createEquipmentLog: (equipmentId: string, description: string) =>
+    request<EquipmentLog>(`/equipment/${equipmentId}/logs`, { method: 'POST', body: JSON.stringify({ description }) }),
+  updateEquipmentLog: (equipmentId: string, logId: number, description: string) =>
+    request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify({ description }) }),
+  deleteEquipmentLog: (equipmentId: string, logId: number) =>
+    request<{ ok: boolean }>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'DELETE' }),
 
   listReservations: (range?: { start: string; end: string }) =>
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),

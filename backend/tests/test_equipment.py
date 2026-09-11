@@ -157,3 +157,78 @@ def test_delete_equipment_photo(super_admin_client):
 def test_equipment_photo_404_when_never_set(super_admin_client, user_a_client):
     super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
     assert user_a_client.get("/equipment/re7s/photo").status_code == 404
+
+
+# --- Registro de uso (RUE, Fase B) -----------------------------------------
+
+
+def test_any_user_can_log_and_list_usage(super_admin_client, user_a_client, user_a):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post("/equipment/re7s/logs", json={"description": "Rodada de pirólise, amostras 1-10"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["description"] == "Rodada de pirólise, amostras 1-10"
+    assert body["user_id"] == user_a.id
+
+    r2 = user_a_client.get("/equipment/re7s/logs")
+    assert len(r2.json()) == 1
+
+
+def test_log_requires_equipment_to_exist(user_a_client):
+    r = user_a_client.post("/equipment/nao-existe/logs", json={"description": "x"})
+    assert r.status_code == 404
+
+
+def test_log_rejects_blank_description(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post("/equipment/re7s/logs", json={"description": "   "})
+    assert r.status_code == 400
+
+
+def test_author_can_edit_own_log(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "primeira versão"}).json()
+    r = user_a_client.patch(f"/equipment/re7s/logs/{log['id']}", json={"description": "corrigido"})
+    assert r.status_code == 200
+    assert r.json()["description"] == "corrigido"
+
+
+def test_other_user_cannot_edit_log(super_admin_client, user_a_client, user_b_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+    r = user_b_client.patch(f"/equipment/re7s/logs/{log['id']}", json={"description": "hackeado"})
+    assert r.status_code == 403
+
+
+def test_admin_can_edit_and_delete_others_log(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+
+    r = super_admin_client.patch(f"/equipment/re7s/logs/{log['id']}", json={"description": "revisado pelo admin"})
+    assert r.status_code == 200
+
+    r2 = super_admin_client.delete(f"/equipment/re7s/logs/{log['id']}")
+    assert r2.status_code == 200
+    assert super_admin_client.get("/equipment/re7s/logs").json() == []
+
+
+def test_author_can_delete_own_log(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+    r = user_a_client.delete(f"/equipment/re7s/logs/{log['id']}")
+    assert r.status_code == 200
+
+
+def test_other_user_cannot_delete_log(super_admin_client, user_a_client, user_b_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+    r = user_b_client.delete(f"/equipment/re7s/logs/{log['id']}")
+    assert r.status_code == 403
+
+
+def test_logs_ordered_most_recent_first(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    user_a_client.post("/equipment/re7s/logs", json={"description": "primeiro", "occurred_at": "2026-01-01T10:00:00"})
+    user_a_client.post("/equipment/re7s/logs", json={"description": "segundo", "occurred_at": "2026-02-01T10:00:00"})
+    r = user_a_client.get("/equipment/re7s/logs")
+    assert [entry["description"] for entry in r.json()] == ["segundo", "primeiro"]
