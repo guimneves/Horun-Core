@@ -2,7 +2,10 @@
 # (dependência de pacote irmão via "file:../design-system" no
 # frontend/package.json), preservando a mesma estrutura relativa de pastas
 # que existe fora do container.
-FROM node:20-alpine AS frontend-build
+# bookworm-slim (glibc), não alpine (musl): o binário nativo do lightningcss
+# (usado pelo Tailwind v4) falha a resolver via optionalDependencies em
+# musl mesmo com o pacote certo no lockfile — troca de base evita o bug.
+FROM node:20-bookworm-slim AS frontend-build
 WORKDIR /app
 COPY design-system ./design-system
 COPY frontend ./frontend
