@@ -78,6 +78,10 @@ Vocês já tinham deixado uma nota "o encaixe ainda não está implementado do l
 
 Sua `AppShell.tsx` tem a barra lateral própria do módulo (Fila/Solicitações/Membros, etc.), mas hoje não tem como voltar pro resto do Horun (Mural, Agenda, outros módulos). Um link simples tipo `<a href="/">← Voltar ao Horun</a>` no topo da barra lateral resolve — fica a seu critério o quanto quer investir nisso agora ou depois.
 
+## Um detalhe: tirar o codinome interno do `MODULE.md`
+
+Reparei que os dois `MODULE.md` (`Controle-Analitico` tem "codinome interno: Hermes", `Controle-de-reagentes` tem "codinome interno: Ossain") incluem uma linha de codinome. Esses codinomes são só uma brincadeira interna nossa de dar nome de divindade a cada módulo enquanto ele é desenvolvido — não devem aparecer em nenhum lugar que o pessoal do laboratório vá ler, nem documentação publicada no repositório. Pode tirar essa linha dos dois arquivos (o resto do manifesto — id, nome público, descrição, ícone, porta, health check — fica igual). Vou cadastrar os dois módulos no Horun só como "Amostras" e "Reagentes".
+
 ## Depois de aplicar
 
 1. Commit e push normalmente, cada repositório no seu próprio ritmo.

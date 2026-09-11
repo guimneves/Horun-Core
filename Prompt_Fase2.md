@@ -3,6 +3,8 @@
 > Documento novo, separado do `Prompt_refinado.md` de cada módulo (que cobre a Fase 1 — protótipo local). Aqui entra o que é **comum a todos os módulos do Horun** (RE7S, Leco, e futuros) na Fase 2: como o site sai do PC do equipamento e vira um serviço acessível pela rede do laboratório. Segue o mesmo formato dos outros documentos do projeto, para uso como briefing de desenvolvimento.
 >
 > Referências: [`Prompt_refinado.md`](https://github.com/guimneves/RE7S-Horun/blob/main/Prompt_refinado.md) do RE7S (seção 2 — visão de fases; seção 7 — arquitetura proposta para Fase 2, já com boa parte das decisões abaixo herdadas de lá) e `Prompt_refinado_Leco.md` do Leco (ainda não versionado em git — ver `Projeto Horun/Leco/` local).
+>
+> Nota válida para todo módulo que chegar a esta fase: codinome interno de desenvolvimento (ex. "Ogun" pro RE7S) nunca aparece em nada visível ao laboratório — interface, API, `MODULE.md`, README, rodapé (regra em `Prompt_Horun_Core.md`, seção 2).
 
 ## 1. Escopo desta fase
 

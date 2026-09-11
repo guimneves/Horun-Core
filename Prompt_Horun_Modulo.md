@@ -62,6 +62,8 @@ Arquivo texto simples na raiz, assim:
 - **health check**: `GET /health`
 ```
 
+**Sem campo de codinome interno aqui.** Já aconteceu de módulos entregues incluírem uma linha "codinome interno: <nome>" neste arquivo por conta própria — remover se aparecer. O manifesto só leva o nome público (regra em `Prompt_Horun_Core.md`, seção 2).
+
 ## 5. Contrato de backend
 
 **Stack**: Python 3.11+, FastAPI, SQLModel (SQLAlchemy), Pydantic. Banco: SQLite em desenvolvimento, PostgreSQL em produção (a URL de conexão vem de uma variável de ambiente, nunca hardcoded).
