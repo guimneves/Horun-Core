@@ -166,6 +166,17 @@ export interface Equipment {
   id: string
   display_name: string
   color: string
+  description: string
+  area_id: number | null
+  module_id: string | null
+  anydesk_id: string
+  pop_folder_path: string
+  has_photo: boolean
+}
+
+export interface EquipmentArea {
+  id: number
+  name: string
 }
 
 export interface Reservation {
@@ -293,6 +304,10 @@ export const api = {
   listModules: () => request<ModuleFull[]>('/modules'),
   createModule: (payload: Omit<ModuleFull, never>) =>
     request<ModuleFull>('/modules', { method: 'POST', body: JSON.stringify(payload) }),
+  // O backend espera o ModuleIn inteiro no PATCH (não é um merge parcial)
+  // — id vai no corpo também, mesmo sendo ignorado (a rota usa o da URL).
+  updateModule: (moduleId: string, payload: ModuleFull) =>
+    request<ModuleFull>(`/modules/${moduleId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteModule: (moduleId: string) => request<{ ok: boolean }>(`/modules/${moduleId}`, { method: 'DELETE' }),
 
   listModuleAccess: (moduleId: string) => request<ModuleAccessEntry[]>(`/modules/${moduleId}/access`),
@@ -339,10 +354,57 @@ export const api = {
   markNotificationsRead: () => request<{ ok: boolean }>('/notifications/mark-read', { method: 'POST' }),
 
   listEquipment: () => request<Equipment[]>('/equipment'),
-  createEquipment: (payload: Equipment) =>
-    request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
+  createEquipment: (payload: {
+    id: string
+    display_name: string
+    color?: string
+    description?: string
+    area_id?: number | null
+    module_id?: string | null
+    anydesk_id?: string
+    pop_folder_path?: string
+  }) => request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
+  updateEquipment: (
+    equipmentId: string,
+    payload: Partial<{
+      display_name: string
+      color: string
+      description: string
+      area_id: number | null
+      clear_area: boolean
+      module_id: string | null
+      clear_module: boolean
+      anydesk_id: string
+      pop_folder_path: string
+    }>,
+  ) => request<Equipment>(`/equipment/${equipmentId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteEquipment: (equipmentId: string) =>
     request<{ ok: boolean }>(`/equipment/${equipmentId}`, { method: 'DELETE' }),
+  uploadEquipmentPhoto: async (equipmentId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`${API_BASE}/equipment/${equipmentId}/photo`, { method: 'POST', credentials: 'include', body: form })
+    if (!res.ok) {
+      let message = res.statusText
+      try {
+        message = (await res.json()).detail ?? message
+      } catch {
+        // corpo sem JSON — mantém statusText
+      }
+      throw new ApiError(res.status, message)
+    }
+    return res.json() as Promise<Equipment>
+  },
+  deleteEquipmentPhoto: (equipmentId: string) =>
+    request<Equipment>(`/equipment/${equipmentId}/photo`, { method: 'DELETE' }),
+
+  listEquipmentAreas: () => request<EquipmentArea[]>('/equipment-areas'),
+  createEquipmentArea: (name: string) =>
+    request<EquipmentArea>('/equipment-areas', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateEquipmentArea: (areaId: number, name: string) =>
+    request<EquipmentArea>(`/equipment-areas/${areaId}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteEquipmentArea: (areaId: number) =>
+    request<{ ok: boolean }>(`/equipment-areas/${areaId}`, { method: 'DELETE' }),
 
   listReservations: (range?: { start: string; end: string }) =>
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),

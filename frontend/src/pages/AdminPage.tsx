@@ -6,6 +6,7 @@ import {
   QUALIFICATIONS,
   type CurrentUser,
   type Equipment,
+  type EquipmentArea,
   type Group,
   type GroupMember,
   type ModuleAccessEntry,
@@ -480,55 +481,140 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
   )
 }
 
-function EquipmentTab({ equipment, onChange }: { equipment: Equipment[]; onChange: () => void }) {
+function EquipmentTab({
+  equipment,
+  onChange,
+  areas,
+  onAreasChange,
+}: {
+  equipment: Equipment[]
+  onChange: () => void
+  areas: EquipmentArea[]
+  onAreasChange: () => void
+}) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [color, setColor] = useState('#15216f')
+  const [areaId, setAreaId] = useState('')
+  const [newAreaName, setNewAreaName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
     setError(null)
     try {
-      await api.createEquipment({ id, display_name: displayName, color })
+      await api.createEquipment({ id, display_name: displayName, color, area_id: areaId ? Number(areaId) : undefined })
       setId('')
       setDisplayName('')
+      setAreaId('')
       onChange()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao cadastrar equipamento.')
     }
   }
 
+  async function handleCreateArea() {
+    if (!newAreaName.trim()) return
+    await api.createEquipmentArea(newAreaName.trim())
+    setNewAreaName('')
+    onAreasChange()
+  }
+
+  async function handleRenameArea(a: EquipmentArea) {
+    const next = window.prompt('Novo nome da área:', a.name)
+    if (!next || next === a.name) return
+    await api.updateEquipmentArea(a.id, next)
+    onAreasChange()
+  }
+
+  async function handleDeleteArea(a: EquipmentArea) {
+    if (!confirm(`Remover a área "${a.name}"? Os equipamentos dela ficam sem área.`)) return
+    await api.deleteEquipmentArea(a.id)
+    onAreasChange()
+    onChange()
+  }
+
   return (
     <div className="flex gap-5">
-      <Table>
-        <thead>
-          <tr>
-            <Th>Equipamento</Th>
-            <Th right>Ações</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {equipment.map((eq) => (
-            <tr key={eq.id}>
-              <Td>
-                <div className="flex items-center gap-2.5">
-                  <div className="h-3.5 w-3.5 flex-shrink-0 rounded" style={{ background: eq.color }} />
-                  <span className="font-medium">{eq.display_name}</span>
-                </div>
-              </Td>
-              <Td right>
-                <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteEquipment(eq.id).then(onChange)}>
-                  remover
-                </button>
-              </Td>
+      <div className="flex-1">
+        <Table>
+          <thead>
+            <tr>
+              <Th>Equipamento</Th>
+              <Th>Área</Th>
+              <Th right>Ações</Th>
             </tr>
+          </thead>
+          <tbody>
+            {equipment.map((eq) => (
+              <tr key={eq.id}>
+                <Td>
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-3.5 w-3.5 flex-shrink-0 rounded" style={{ background: eq.color }} />
+                    <span className="font-medium">{eq.display_name}</span>
+                  </div>
+                </Td>
+                <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
+                <Td right>
+                  <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteEquipment(eq.id).then(onChange)}>
+                    remover
+                  </button>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+
+        <div className="mt-6 text-[13px] font-semibold">Áreas do laboratório</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {areas.map((a) => (
+            <span
+              key={a.id}
+              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
+              style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
+            >
+              {a.name}
+              <button onClick={() => handleRenameArea(a)} style={{ color: 'var(--color-text-muted)' }}>
+                editar
+              </button>
+              <button onClick={() => handleDeleteArea(a)} style={{ color: '#d43b3b' }}>
+                remover
+              </button>
+            </span>
           ))}
-        </tbody>
-      </Table>
+          <span className="flex items-center gap-1.5">
+            <input
+              value={newAreaName}
+              onChange={(e) => setNewAreaName(e.target.value)}
+              placeholder="nova área…"
+              className="rounded-full px-3 py-1.5 text-xs outline-none"
+              style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            />
+            <button onClick={handleCreateArea} className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
+              + adicionar
+            </button>
+          </span>
+        </div>
+      </div>
 
       <CreatePanel title="Cadastrar equipamento">
         <FieldInput label="Id (slug)" placeholder="ex.: leco832" value={id} onChange={(e) => setId(e.target.value)} />
         <FieldInput label="Nome" placeholder="ex.: LECO 832" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        <div className="mb-3.5">
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+            Área
+          </label>
+          <select
+            value={areaId}
+            onChange={(e) => setAreaId(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+          >
+            <option value="">Sem área</option>
+            {areas.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </div>
         <div className="mb-3.5">
           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
             Cor na agenda
@@ -543,6 +629,10 @@ function EquipmentTab({ equipment, onChange }: { equipment: Equipment[]; onChang
         <PrimaryButton onClick={handleCreate} disabled={!id || !displayName}>
           Cadastrar equipamento
         </PrimaryButton>
+        <p className="mt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Descrição, foto, AnyDesk, pasta de POPs e módulo vinculado ficam na página{' '}
+          <strong>Equipamentos</strong>, no menu lateral.
+        </p>
       </CreatePanel>
     </div>
   )
@@ -817,6 +907,7 @@ export function AdminPage() {
   const [modules, setModules] = useState<ModuleFull[]>([])
   const [users, setUsers] = useState<CurrentUser[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [areas, setAreas] = useState<EquipmentArea[]>([])
 
   const reloadModules = () => {
     api.listModules().then(setModules)
@@ -827,10 +918,14 @@ export function AdminPage() {
   const reloadEquipment = () => {
     api.listEquipment().then(setEquipment)
   }
+  const reloadAreas = () => {
+    api.listEquipmentAreas().then(setAreas)
+  }
 
   useEffect(reloadModules, [])
   useEffect(reloadUsers, [])
   useEffect(reloadEquipment, [])
+  useEffect(reloadAreas, [])
 
   return (
     <div className="p-6">
@@ -859,7 +954,9 @@ export function AdminPage() {
       {tab === 'Usuários' && <UsersTab users={users} onChange={reloadUsers} />}
       {tab === 'Grupos' && <GroupsTab users={users} />}
       {tab === 'Módulos' && <ModulesTab modules={modules} onChange={reloadModules} />}
-      {tab === 'Equipamentos' && <EquipmentTab equipment={equipment} onChange={reloadEquipment} />}
+      {tab === 'Equipamentos' && (
+        <EquipmentTab equipment={equipment} onChange={reloadEquipment} areas={areas} onAreasChange={reloadAreas} />
+      )}
       {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} />}
     </div>
   )

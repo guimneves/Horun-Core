@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Birthday, type CalendarEvent, type Equipment, type Group, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
@@ -294,6 +295,7 @@ type Panel =
 
 export function AgendaPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const [weekOffset, setWeekOffset] = useState(0)
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -339,6 +341,22 @@ export function AgendaPage() {
   useEffect(() => {
     api.listGroups().then((gs) => setMyGroups(gs.filter((g) => g.is_member))).catch(() => {})
   }, [])
+
+  // Vindo da página Equipamentos ("ir para a agenda"): garante que aquele
+  // equipamento esteja visível na legenda, mesmo que a pessoa tivesse
+  // ocultado antes.
+  useEffect(() => {
+    const eq = searchParams.get('eq')
+    if (!eq || !hidden.has(eq)) return
+    const next = new Set(hidden)
+    next.delete(eq)
+    setHidden(next)
+    try {
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
+    } catch {
+      /* ok */
+    }
+  }, [searchParams])
 
   // Reservas de equipamento + aniversários são sempre do laboratório; o
   // escopo só filtra quais eventos aparecem e onde um novo evento entra.

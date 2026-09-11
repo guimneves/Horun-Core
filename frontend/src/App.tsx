@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { MuralPage } from './pages/MuralPage'
 import { ModulesPage } from './pages/ModulesPage'
 import { AgendaPage } from './pages/AgendaPage'
+import { EquipmentPage } from './pages/EquipmentPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ColaboradoresPage } from './pages/ColaboradoresPage'
@@ -14,7 +15,7 @@ import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
 import { OnboardingModal } from './components/OnboardingModal'
 import { GlobalSearch } from './components/GlobalSearch'
-import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon } from './icons'
+import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon, EquipmentIcon } from './icons'
 import { readHiddenModules, onHiddenModulesChange } from './sidebarModules'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
@@ -90,6 +91,10 @@ function SideNav() {
         <NavLink to="/agenda" className={navLinkClass} style={navLinkStyle}>
           <AgendaIcon />
           Agenda
+        </NavLink>
+        <NavLink to="/equipamentos" className={navLinkClass} style={navLinkStyle}>
+          <EquipmentIcon />
+          Equipamentos
         </NavLink>
         <NavLink to="/colaboradores" className={navLinkClass} style={navLinkStyle}>
           <PeopleIcon />
@@ -212,6 +217,16 @@ export default function App() {
               <RequireAuth>
                 <Shell>
                   <AgendaPage />
+                </Shell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/equipamentos"
+            element={
+              <RequireAuth>
+                <Shell>
+                  <EquipmentPage />
                 </Shell>
               </RequireAuth>
             }

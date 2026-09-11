@@ -64,6 +64,15 @@ export function PeopleIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function EquipmentIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 3h6M10 3v6.5L5.5 18a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 9.5V3" />
+      <path d="M7.5 15h9" />
+    </svg>
+  )
+}
+
 export function SearchIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base({ width: 16, height: 16, ...props })}>

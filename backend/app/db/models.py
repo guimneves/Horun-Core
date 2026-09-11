@@ -216,14 +216,36 @@ class Event(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class EquipmentArea(SQLModel, table=True):
+    """Área física do laboratório (ex. "Sala de Cromatografia") — agrupa
+    equipamentos na página Equipamentos. Conceito diferente de `Group`
+    (que agrupa colaboradores, não equipamentos) — nomes distintos de
+    propósito, para não confundir os dois no código."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Equipment(SQLModel, table=True):
     """Equipamento reservável na Agenda — conceito separado de `Module`:
     nem todo equipamento tem módulo de software (ex. balança analítica), e
-    o inverso também vale (o Horun Core em si não é um equipamento)."""
+    o inverso também vale (o Horun Core em si não é um equipamento).
+    `module_id` liga os dois quando existir."""
 
     id: str = Field(primary_key=True)  # slug, ex. "re7s", "leco832"
     display_name: str
     color: str = "#15216f"  # usada na legenda/blocos da Agenda
+    description: str = ""
+    area_id: Optional[int] = Field(default=None, foreign_key="equipmentarea.id", index=True)
+    module_id: Optional[str] = Field(default=None, foreign_key="module.id", index=True)
+    anydesk_id: str = ""
+    pop_folder_path: str = ""
+    # Foto servida separada (GET /equipment/{id}/photo), mesmo padrão da
+    # foto de perfil do usuário — não pesa a listagem carregando bytes à
+    # toa (ver User.photo em routes_auth.py).
+    photo: Optional[bytes] = None
+    photo_content_type: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 

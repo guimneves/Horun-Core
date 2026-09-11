@@ -96,6 +96,17 @@ def _run_migrations() -> None:
     # --- event: escopo de grupo (Fase 2) ---
     _ensure_column("event", "group_id", "INTEGER")
 
+    # --- equipment: perfil rico (área, descrição, foto, AnyDesk, POPs,
+    # módulo vinculado) — Fase A da página Equipamentos ---
+    _ensure_column("equipment", "description", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "area_id", "INTEGER")
+    _ensure_column("equipment", "module_id", "VARCHAR")
+    _ensure_column("equipment", "anydesk_id", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "pop_folder_path", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "photo", blob)
+    _ensure_column("equipment", "photo_content_type", "VARCHAR")
+    _backfill_null_text("equipment", ("description", "anydesk_id", "pop_folder_path"))
+
     if is_pg:
         # SQLite não suporta esses ALTER, mas também não precisa: dev sempre
         # recria o arquivo do zero a partir do modelo atual.
