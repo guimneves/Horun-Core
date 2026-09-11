@@ -398,6 +398,22 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   )
 }
 
+function ModuleIconInput({ module, onChange }: { module: ModuleFull; onChange: () => void }) {
+  const [icon, setIcon] = useState(module.icon)
+  useEffect(() => setIcon(module.icon), [module.icon])
+
+  return (
+    <input
+      value={icon}
+      onChange={(e) => setIcon(e.target.value)}
+      onBlur={() => icon !== module.icon && icon.trim() && api.updateModule(module.id, { ...module, icon }).then(onChange)}
+      className="w-11 rounded-lg px-1.5 py-1 text-center text-lg outline-none"
+      style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
+      title="Ícone do módulo"
+    />
+  )
+}
+
 function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: () => void }) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -432,6 +448,7 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
       <Table>
         <thead>
           <tr>
+            <Th>Ícone</Th>
             <Th>Módulo</Th>
             <Th>URL interna</Th>
             <Th right>Ações</Th>
@@ -440,6 +457,9 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
         <tbody>
           {modules.map((m) => (
             <tr key={m.id}>
+              <Td>
+                <ModuleIconInput module={m} onChange={onChange} />
+              </Td>
               <Td>
                 <span className="font-medium">{m.display_name}</span>
               </Td>
