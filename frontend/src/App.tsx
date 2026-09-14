@@ -8,6 +8,7 @@ import { MuralPage } from './pages/MuralPage'
 import { ModulesPage } from './pages/ModulesPage'
 import { AgendaPage } from './pages/AgendaPage'
 import { EquipmentPage } from './pages/EquipmentPage'
+import { EquipmentDetailPage } from './pages/EquipmentDetailPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ColaboradoresPage } from './pages/ColaboradoresPage'
@@ -227,6 +228,16 @@ export default function App() {
               <RequireAuth>
                 <Shell>
                   <EquipmentPage />
+                </Shell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/equipamentos/:id"
+            element={
+              <RequireAuth>
+                <Shell>
+                  <EquipmentDetailPage />
                 </Shell>
               </RequireAuth>
             }

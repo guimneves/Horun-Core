@@ -1,2 +1,18 @@
 /* Tokens específicos do Core, se precisar de algum — os tokens
    compartilhados já vêm de @horun/design-system/src/tokens.css. */
+
+/* View Transitions (API nativa do navegador) — usada na navegação do
+   card de um equipamento pra sua página de detalhe (React Router
+   `<Link viewTransition>` + `view-transition-name` compartilhado na
+   foto). Sem suporte no navegador, a navegação simplesmente ocorre sem
+   animação — nada quebra. Mesma curva/duração em toda a plataforma. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
