@@ -82,6 +82,33 @@ Sua `AppShell.tsx` tem a barra lateral própria do módulo (Fila/Solicitações/
 
 Reparei que os dois `MODULE.md` (`Controle-Analitico` tem "codinome interno: Hermes", `Controle-de-reagentes` tem "codinome interno: Ossain") incluem uma linha de codinome. Esses codinomes são só uma brincadeira interna nossa de dar nome de divindade a cada módulo enquanto ele é desenvolvido — não devem aparecer em nenhum lugar que o pessoal do laboratório vá ler, nem documentação publicada no repositório. Pode tirar essa linha dos dois arquivos (o resto do manifesto — id, nome público, descrição, ícone, porta, health check — fica igual). Vou cadastrar os dois módulos no Horun só como "Amostras" e "Reagentes".
 
+## Importante: os dois backends caíram em produção por falta de migração
+
+Aconteceu de verdade hoje (2026-09-14): os dois backends (`Controle-Analitico` e `Controle-de-reagentes`) entraram em loop de reinício no servidor. Causa nos dois casos, idêntica: o modelo Python ganhou uma coluna nova (`Equipment.group` no Amostras; `Reagent.gas_full_pressure`/`gas_full_pressure_unit` no Reagentes) depois que o banco de produção já tinha sido criado uma vez — e `SQLModel.metadata.create_all(engine)` **só cria tabela que não existe, nunca adiciona coluna numa tabela que já existe**. Toda consulta em `Equipment`/`Reagent` quebrava com `UndefinedColumn` e o backend caía assim que tentava iniciar.
+
+Resolvi manualmente por agora (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS` direto no Postgres dos dois), mas isso vai acontecer de novo a cada campo novo que vocês adicionarem, a menos que o `create_db_and_tables()` (`app/core/db.py` nos dois repositórios) ganhe uma migração defensiva. É exatamente o mesmo problema que o Core já teve e resolveu — o padrão que uso lá (`backend/app/db/session.py` do `Horun-Core`) é assim, e serve pros dois repositórios de vocês do mesmo jeito:
+
+```python
+from sqlalchemy import inspect
+
+def _ensure_column(engine, table: str, column: str, ddl_type: str) -> None:
+    existing = {c["name"] for c in inspect(engine).get_columns(table)}
+    if column in existing:
+        return
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
+
+def create_db_and_tables() -> None:
+    SQLModel.metadata.create_all(engine)
+    # uma linha por coluna que já foi adicionada a um modelo depois do
+    # primeiro deploy — cresce com o tempo, mas nunca quebra
+    _ensure_column(engine, "equipment", "group", "VARCHAR")
+    _ensure_column(engine, "reagent", "gas_full_pressure", "DOUBLE PRECISION DEFAULT 0")
+    _ensure_column(engine, "reagent", "gas_full_pressure_unit", "VARCHAR DEFAULT 'bar'")
+```
+
+Cada repositório só precisa das linhas relevantes a ele. A partir de agora, sempre que adicionar um campo num modelo que já tem tabela em produção, é só somar uma chamada de `_ensure_column` — sem isso, todo `git pull` + rebuild no servidor tem chance de derrubar o módulo de novo.
+
 ## Depois de aplicar
 
 1. Commit e push normalmente, cada repositório no seu próprio ritmo.

@@ -29,6 +29,9 @@
 
 **[A DEFINIR]**: se está no domínio `NQTRlab.INT` ou não (não bloqueante, ver seção 4) — hostname padrão do Windows (`DESKTOP-N6KR7DO`) sugere instalação nova, ainda não configurada/nomeada pelo laboratório.
 
+**Incidente real (2026-09-14) — IP mudou sozinho, ninguém mais conseguia acessar**: a máquina está ligada via **Wi-Fi** (o adaptador Ethernet aparece desconectado — `ipconfig` mostrando "mídia desconectada"), sem IP fixo/reserva de DHCP. Em algum momento o DHCP do roteador trocou o endereço de `.171` pra `.117`, e como nada na rede do laboratório aponta pro hostname (só pro IP fixo combinado), o acesso parou de funcionar sem nenhum log de erro — a máquina, o Docker e os containers continuavam todos saudáveis, só o endereço tinha mudado. Diagnóstico: `ping` do IP antigo respondendo "host de destino inacessível" a partir do próprio IP de quem pinga (falha de ARP — sinal de que ninguém responde àquele endereço na sub-rede, não necessariamente que a máquina caiu); `ipconfig` direto na máquina confirmou o IP novo.
+**Ações pendentes pra não repetir**: (1) **reserva de DHCP** no roteador pro MAC dessa máquina, fixando `.171` (ou adotando o novo `.117` como definitivo) — ainda não feita; (2) considerar **cabo Ethernet** em vez de Wi-Fi pra esse servidor — mais estável, sem esse tipo de deriva de endereço.
+
 ### 2.1 Checklist de qualificação de um PC dedicado (reaplicar para a próxima máquina)
 
 Passos, na ordem, para qualificar qualquer PC candidato — é exatamente o que foi feito com o `NQTR-PC37` a primeira vez, generalizado para reaplicar sem precisar redescobrir cada coisa do zero:
