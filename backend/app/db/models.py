@@ -115,6 +115,16 @@ class UserModuleAccess(SQLModel, table=True):
     granted_at: datetime = Field(default_factory=utcnow)
 
 
+class ModuleContributor(SQLModel, table=True):
+    """Quem trabalhou num módulo — diferente de `UserModuleAccess` (que é
+    permissão de *uso*). Aparece na tela "Sobre" (créditos por módulo)."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    module_id: str = Field(foreign_key="module.id", index=True)
+    added_at: datetime = Field(default_factory=utcnow)
+
+
 class Group(SQLModel, table=True):
     """Grupo de colaboradores (Fase 2). Cada grupo tem um mural e eventos
     de calendário próprios, visíveis só pros membros. O `internal_admin`

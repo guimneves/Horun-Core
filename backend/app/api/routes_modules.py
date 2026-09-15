@@ -12,7 +12,7 @@ from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
 from app.core.config import settings
-from app.db.models import Module, User, UserModuleAccess
+from app.db.models import Module, ModuleContributor, User, UserModuleAccess
 
 router = APIRouter(tags=["modules"])
 
@@ -211,5 +211,73 @@ def revoke_module_access(module_id: str, user_id: int, _admin: SuperAdminUser, s
     if grant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Permissão não encontrada")
     session.delete(grant)
+    session.commit()
+    return {"ok": True}
+
+
+# --- Contribuidores (créditos por módulo, tela "Sobre") -------------------
+
+
+class ContributorIn(BaseModel):
+    user_id: int
+
+
+class ContributorOut(BaseModel):
+    user_id: int
+    display_name: str
+    has_photo: bool
+
+
+def _contributor_out(u: User) -> ContributorOut:
+    return ContributorOut(user_id=u.id, display_name=u.display_name or u.username, has_photo=u.photo is not None)
+
+
+@router.get("/modules/{module_id}/contributors", response_model=list[ContributorOut])
+def list_module_contributors(module_id: str, _user: CurrentUser, session: SessionDep):
+    """Aberto a qualquer autenticado — é o que alimenta a tela "Sobre",
+    que mostra os créditos de todo módulo pra todo mundo."""
+    if session.get(Module, module_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
+    rows = session.exec(select(ModuleContributor).where(ModuleContributor.module_id == module_id)).all()
+    out = []
+    for r in rows:
+        u = session.get(User, r.user_id)
+        if u is not None:
+            out.append(_contributor_out(u))
+    return out
+
+
+@router.post("/modules/{module_id}/contributors", response_model=ContributorOut)
+def add_module_contributor(module_id: str, payload: ContributorIn, _admin: SuperAdminUser, session: SessionDep):
+    module = session.get(Module, module_id)
+    if module is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
+    target = session.get(User, payload.user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")
+
+    existing = session.exec(
+        select(ModuleContributor)
+        .where(ModuleContributor.module_id == module_id)
+        .where(ModuleContributor.user_id == payload.user_id)
+    ).first()
+    if existing is not None:
+        return _contributor_out(target)
+
+    session.add(ModuleContributor(module_id=module_id, user_id=payload.user_id))
+    session.commit()
+    return _contributor_out(target)
+
+
+@router.delete("/modules/{module_id}/contributors/{user_id}")
+def remove_module_contributor(module_id: str, user_id: int, _admin: SuperAdminUser, session: SessionDep):
+    row = session.exec(
+        select(ModuleContributor)
+        .where(ModuleContributor.module_id == module_id)
+        .where(ModuleContributor.user_id == user_id)
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Contribuidor não encontrado")
+    session.delete(row)
     session.commit()
     return {"ok": True}

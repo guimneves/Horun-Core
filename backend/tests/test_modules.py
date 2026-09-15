@@ -103,3 +103,58 @@ def test_super_admin_always_has_access_without_explicit_grant(super_admin_client
     _register_module(super_admin_client)
     dash = super_admin_client.get("/dashboard/modules").json()
     assert dash[0]["has_access"] is True
+
+
+# --- Contribuidores (créditos) ---------------------------------------------
+
+
+def test_list_contributors_empty(super_admin_client, user_a_client):
+    _register_module(super_admin_client)
+    r = user_a_client.get("/modules/re7s/contributors")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_add_and_list_contributor(super_admin_client, user_a_client, user_a):
+    _register_module(super_admin_client)
+    r = super_admin_client.post("/modules/re7s/contributors", json={"user_id": user_a.id})
+    assert r.status_code == 200
+    assert r.json()["user_id"] == user_a.id
+
+    r2 = user_a_client.get("/modules/re7s/contributors")
+    assert len(r2.json()) == 1
+    assert r2.json()[0]["display_name"]
+
+
+def test_regular_user_cannot_add_contributor(user_a_client, user_b, super_admin_client):
+    _register_module(super_admin_client)
+    r = user_a_client.post("/modules/re7s/contributors", json={"user_id": user_b.id})
+    assert r.status_code == 403
+
+
+def test_adding_same_contributor_twice_is_idempotent(super_admin_client, user_a):
+    _register_module(super_admin_client)
+    super_admin_client.post("/modules/re7s/contributors", json={"user_id": user_a.id})
+    super_admin_client.post("/modules/re7s/contributors", json={"user_id": user_a.id})
+    r = super_admin_client.get("/modules/re7s/contributors")
+    assert len(r.json()) == 1
+
+
+def test_remove_contributor(super_admin_client, user_a):
+    _register_module(super_admin_client)
+    super_admin_client.post("/modules/re7s/contributors", json={"user_id": user_a.id})
+    r = super_admin_client.delete(f"/modules/re7s/contributors/{user_a.id}")
+    assert r.status_code == 200
+    assert super_admin_client.get("/modules/re7s/contributors").json() == []
+
+
+def test_remove_contributor_requires_super_admin(super_admin_client, user_a_client, user_a):
+    _register_module(super_admin_client)
+    super_admin_client.post("/modules/re7s/contributors", json={"user_id": user_a.id})
+    r = user_a_client.delete(f"/modules/re7s/contributors/{user_a.id}")
+    assert r.status_code == 403
+
+
+def test_contributor_module_must_exist(super_admin_client, user_a):
+    r = super_admin_client.post("/modules/nao-existe/contributors", json={"user_id": user_a.id})
+    assert r.status_code == 404

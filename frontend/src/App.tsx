@@ -12,11 +12,12 @@ import { EquipmentDetailPage } from './pages/EquipmentDetailPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ColaboradoresPage } from './pages/ColaboradoresPage'
+import { SobrePage } from './pages/SobrePage'
 import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
 import { OnboardingModal } from './components/OnboardingModal'
 import { GlobalSearch } from './components/GlobalSearch'
-import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon, EquipmentIcon } from './icons'
+import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon, EquipmentIcon, InfoIcon } from './icons'
 import { readHiddenModules, onHiddenModulesChange } from './sidebarModules'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
@@ -108,6 +109,10 @@ function SideNav() {
             Administração
           </NavLink>
         )}
+        <NavLink to="/sobre" className={navLinkClass} style={navLinkStyle}>
+          <InfoIcon />
+          Sobre
+        </NavLink>
       </div>
 
       {user && (
@@ -248,6 +253,16 @@ export default function App() {
               <RequireAuth>
                 <Shell>
                   <ProfilePage />
+                </Shell>
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/sobre"
+            element={
+              <RequireAuth>
+                <Shell>
+                  <SobrePage />
                 </Shell>
               </RequireAuth>
             }

@@ -100,6 +100,12 @@ export interface ModuleAccessEntry {
   username: string
 }
 
+export interface ModuleContributor {
+  user_id: number
+  display_name: string
+  has_photo: boolean
+}
+
 export interface PostReply {
   id: number
   post_id: number
@@ -325,6 +331,12 @@ export const api = {
     request<{ ok: boolean }>(`/modules/${moduleId}/access`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   revokeModuleAccess: (moduleId: string, userId: number) =>
     request<{ ok: boolean }>(`/modules/${moduleId}/access/${userId}`, { method: 'DELETE' }),
+
+  listModuleContributors: (moduleId: string) => request<ModuleContributor[]>(`/modules/${moduleId}/contributors`),
+  addModuleContributor: (moduleId: string, userId: number) =>
+    request<ModuleContributor>(`/modules/${moduleId}/contributors`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  removeModuleContributor: (moduleId: string, userId: number) =>
+    request<{ ok: boolean }>(`/modules/${moduleId}/contributors/${userId}`, { method: 'DELETE' }),
 
   listPosts: (groupId?: number | null) =>
     request<Post[]>(`/posts${groupId ? `?group_id=${groupId}` : ''}`),

@@ -10,6 +10,7 @@ import {
   type Group,
   type GroupMember,
   type ModuleAccessEntry,
+  type ModuleContributor,
   type ModuleFull,
 } from '../api/client'
 import { Avatar } from '../components/Avatar'
@@ -414,7 +415,60 @@ function ModuleIconInput({ module, onChange }: { module: ModuleFull; onChange: (
   )
 }
 
-function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: () => void }) {
+function ModuleContributorsCell({ moduleId, users }: { moduleId: string; users: CurrentUser[] }) {
+  const [contributors, setContributors] = useState<ModuleContributor[]>([])
+  const [adding, setAdding] = useState('')
+
+  function reload() {
+    api.listModuleContributors(moduleId).then(setContributors).catch(() => {})
+  }
+  useEffect(reload, [moduleId])
+
+  const contributorIds = new Set(contributors.map((c) => c.user_id))
+  const candidates = users.filter((u) => !contributorIds.has(u.id))
+
+  async function handleAdd(userId: string) {
+    if (!userId) return
+    await api.addModuleContributor(moduleId, Number(userId))
+    setAdding('')
+    reload()
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {contributors.map((c) => (
+        <span
+          key={c.user_id}
+          className="flex items-center gap-1.5 rounded-full px-2 py-1 text-xs"
+          style={{ background: 'var(--color-surface)' }}
+        >
+          {c.display_name}
+          <button
+            onClick={() => api.removeModuleContributor(moduleId, c.user_id).then(reload)}
+            style={{ color: '#d43b3b' }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      {candidates.length > 0 && (
+        <select
+          value={adding}
+          onChange={(e) => handleAdd(e.target.value)}
+          className="rounded-full px-2 py-1 text-xs outline-none"
+          style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}
+        >
+          <option value="">+ adicionar</option>
+          {candidates.map((u) => (
+            <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  )
+}
+
+function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users: CurrentUser[]; onChange: () => void }) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
@@ -451,6 +505,7 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
             <Th>Ícone</Th>
             <Th>Módulo</Th>
             <Th>URL interna</Th>
+            <Th>Contribuidores</Th>
             <Th right>Ações</Th>
           </tr>
         </thead>
@@ -467,6 +522,9 @@ function ModulesTab({ modules, onChange }: { modules: ModuleFull[]; onChange: ()
                 <code className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   {m.internal_base_url}
                 </code>
+              </Td>
+              <Td>
+                <ModuleContributorsCell moduleId={m.id} users={users} />
               </Td>
               <Td right>
                 <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteModule(m.id).then(onChange)}>
@@ -973,7 +1031,7 @@ export function AdminPage() {
 
       {tab === 'Usuários' && <UsersTab users={users} onChange={reloadUsers} />}
       {tab === 'Grupos' && <GroupsTab users={users} />}
-      {tab === 'Módulos' && <ModulesTab modules={modules} onChange={reloadModules} />}
+      {tab === 'Módulos' && <ModulesTab modules={modules} users={users} onChange={reloadModules} />}
       {tab === 'Equipamentos' && (
         <EquipmentTab equipment={equipment} onChange={reloadEquipment} areas={areas} onAreasChange={reloadAreas} />
       )}
