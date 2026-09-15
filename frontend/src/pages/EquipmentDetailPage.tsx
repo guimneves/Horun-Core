@@ -13,6 +13,9 @@ const fieldStyle = { border: '1px solid var(--color-border)', background: 'var(-
 const labelCls = 'mb-1 block text-xs font-medium'
 const labelStyle = { color: 'var(--color-text-muted)' }
 
+const TABS = ['Ficha de utilização', 'Agenda', 'Informações'] as const
+type DetailTab = (typeof TABS)[number]
+
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
@@ -68,6 +71,7 @@ export function EquipmentDetailPage() {
   const [assetTag, setAssetTag] = useState('')
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tab, setTab] = useState<DetailTab>('Ficha de utilização')
 
   function reload() {
     Promise.all([api.listEquipment(), api.listEquipmentAreas(), api.listEquipmentTypes(), api.dashboardModules()])
@@ -218,7 +222,33 @@ export function EquipmentDetailPage() {
 
       {error && <p className="mb-4 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
-      <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="mb-5 flex gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="pb-2.5 pt-1 text-[13.5px]"
+            style={{
+              color: tab === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
+              fontWeight: tab === t ? 600 : 400,
+              borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent',
+            }}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'Ficha de utilização' && (
+        <Card>
+          <UsageLogSection equipmentId={eq.id} />
+        </Card>
+      )}
+
+      {tab === 'Agenda' && <EquipmentWeekGrid equipment={eq} />}
+
+      {tab === 'Informações' && (
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <Card>
           <label className={labelCls} style={labelStyle}>Área</label>
           {isAdmin ? (
@@ -453,15 +483,7 @@ export function EquipmentDetailPage() {
           <EquipmentQrCode equipmentName={eq.display_name} />
         </Card>
       </div>
-
-      <div className="mb-6">
-        <Card>
-          <UsageLogSection equipmentId={eq.id} />
-        </Card>
-      </div>
-
-      <div className="mb-3 text-sm font-semibold">Agenda</div>
-      <EquipmentWeekGrid equipment={eq} />
+      )}
     </div>
   )
 }
