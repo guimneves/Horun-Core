@@ -107,6 +107,23 @@ def _run_migrations() -> None:
     _ensure_column("equipment", "photo_content_type", "VARCHAR")
     _backfill_null_text("equipment", ("description", "anydesk_id", "pop_folder_path"))
 
+    # --- equipment: identidade (cabeçalho da ficha RUE de papel) ---
+    _ensure_column("equipment", "manufacturer", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "model_name", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "serial_number", "VARCHAR DEFAULT ''")
+    _ensure_column("equipment", "asset_tag", "VARCHAR DEFAULT ''")
+    _backfill_null_text("equipment", ("manufacturer", "model_name", "serial_number", "asset_tag"))
+    _ensure_column("equipment", "type_id", "INTEGER")
+
+    # --- equipmentlog: ficha de utilização (RUE) — campos da ficha de
+    # papel do laboratório, além dos que já existiam (Fase B) ---
+    _ensure_column("equipmentlog", "purpose", "VARCHAR DEFAULT 'AN'")
+    _ensure_column("equipmentlog", "experiment_code", "VARCHAR DEFAULT ''")
+    _ensure_column("equipmentlog", "ended_at", "TIMESTAMP")
+    _ensure_column("equipmentlog", "verified_by_id", "INTEGER")
+    _ensure_column("equipmentlog", "verified_at", "TIMESTAMP")
+    _backfill_null_text("equipmentlog", ("purpose", "experiment_code"))
+
     if is_pg:
         # SQLite não suporta esses ALTER, mas também não precisa: dev sempre
         # recria o arquivo do zero a partir do modelo atual.

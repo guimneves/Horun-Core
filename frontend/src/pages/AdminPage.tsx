@@ -7,6 +7,7 @@ import {
   type CurrentUser,
   type Equipment,
   type EquipmentArea,
+  type EquipmentType,
   type Group,
   type GroupMember,
   type ModuleAccessEntry,
@@ -559,56 +560,111 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
   )
 }
 
+function ChipGroup({
+  title,
+  items,
+  placeholder,
+  onCreate,
+  onRename,
+  onDelete,
+}: {
+  title: string
+  items: { id: number; name: string }[]
+  placeholder: string
+  onCreate: (name: string) => Promise<void>
+  onRename: (item: { id: number; name: string }) => Promise<void>
+  onDelete: (item: { id: number; name: string }) => Promise<void>
+}) {
+  const [draft, setDraft] = useState('')
+
+  async function handleCreate() {
+    if (!draft.trim()) return
+    await onCreate(draft.trim())
+    setDraft('')
+  }
+
+  return (
+    <div className="mt-6">
+      <div className="text-[13px] font-semibold">{title}</div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span
+            key={item.id}
+            className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
+            style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
+          >
+            {item.name}
+            <button onClick={() => onRename(item)} style={{ color: 'var(--color-text-muted)' }}>
+              editar
+            </button>
+            <button onClick={() => onDelete(item)} style={{ color: '#d43b3b' }}>
+              remover
+            </button>
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder}
+            className="rounded-full px-3 py-1.5 text-xs outline-none"
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+          />
+          <button onClick={handleCreate} className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
+            + adicionar
+          </button>
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function EquipmentTab({
   equipment,
   onChange,
   areas,
   onAreasChange,
+  types,
+  onTypesChange,
 }: {
   equipment: Equipment[]
   onChange: () => void
   areas: EquipmentArea[]
   onAreasChange: () => void
+  types: EquipmentType[]
+  onTypesChange: () => void
 }) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [color, setColor] = useState('#15216f')
   const [areaId, setAreaId] = useState('')
-  const [newAreaName, setNewAreaName] = useState('')
+  const [typeId, setTypeId] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
     setError(null)
     try {
-      await api.createEquipment({ id, display_name: displayName, color, area_id: areaId ? Number(areaId) : undefined })
+      await api.createEquipment({
+        id,
+        display_name: displayName,
+        color,
+        area_id: areaId ? Number(areaId) : undefined,
+        type_id: typeId ? Number(typeId) : undefined,
+      })
       setId('')
       setDisplayName('')
       setAreaId('')
+      setTypeId('')
       onChange()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao cadastrar equipamento.')
     }
   }
 
-  async function handleCreateArea() {
-    if (!newAreaName.trim()) return
-    await api.createEquipmentArea(newAreaName.trim())
-    setNewAreaName('')
-    onAreasChange()
-  }
-
-  async function handleRenameArea(a: EquipmentArea) {
-    const next = window.prompt('Novo nome da área:', a.name)
-    if (!next || next === a.name) return
-    await api.updateEquipmentArea(a.id, next)
-    onAreasChange()
-  }
-
-  async function handleDeleteArea(a: EquipmentArea) {
-    if (!confirm(`Remover a área "${a.name}"? Os equipamentos dela ficam sem área.`)) return
-    await api.deleteEquipmentArea(a.id)
-    onAreasChange()
-    onChange()
+  async function handleRename(item: { id: number; name: string }, current: string, rename: (id: number, name: string) => Promise<unknown>) {
+    const next = window.prompt('Novo nome:', current)
+    if (!next || next === current) return
+    await rename(item.id, next)
   }
 
   return (
@@ -619,6 +675,7 @@ function EquipmentTab({
             <tr>
               <Th>Equipamento</Th>
               <Th>Área</Th>
+              <Th>Tipo</Th>
               <Th right>Ações</Th>
             </tr>
           </thead>
@@ -632,6 +689,7 @@ function EquipmentTab({
                   </div>
                 </Td>
                 <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
+                <Td>{types.find((t) => t.id === eq.type_id)?.name ?? '—'}</Td>
                 <Td right>
                   <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteEquipment(eq.id).then(onChange)}>
                     remover
@@ -642,36 +700,33 @@ function EquipmentTab({
           </tbody>
         </Table>
 
-        <div className="mt-6 text-[13px] font-semibold">Áreas do laboratório</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {areas.map((a) => (
-            <span
-              key={a.id}
-              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
-              style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
-            >
-              {a.name}
-              <button onClick={() => handleRenameArea(a)} style={{ color: 'var(--color-text-muted)' }}>
-                editar
-              </button>
-              <button onClick={() => handleDeleteArea(a)} style={{ color: '#d43b3b' }}>
-                remover
-              </button>
-            </span>
-          ))}
-          <span className="flex items-center gap-1.5">
-            <input
-              value={newAreaName}
-              onChange={(e) => setNewAreaName(e.target.value)}
-              placeholder="nova área…"
-              className="rounded-full px-3 py-1.5 text-xs outline-none"
-              style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-            />
-            <button onClick={handleCreateArea} className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
-              + adicionar
-            </button>
-          </span>
-        </div>
+        <ChipGroup
+          title="Áreas do laboratório"
+          items={areas}
+          placeholder="nova área…"
+          onCreate={(name) => api.createEquipmentArea(name).then(onAreasChange)}
+          onRename={(item) => handleRename(item, item.name, (aid, name) => api.updateEquipmentArea(aid, name).then(onAreasChange))}
+          onDelete={async (item) => {
+            if (!confirm(`Remover a área "${item.name}"? Os equipamentos dela ficam sem área.`)) return
+            await api.deleteEquipmentArea(item.id)
+            onAreasChange()
+            onChange()
+          }}
+        />
+
+        <ChipGroup
+          title="Tipos de equipamento"
+          items={types}
+          placeholder="novo tipo…"
+          onCreate={(name) => api.createEquipmentType(name).then(onTypesChange)}
+          onRename={(item) => handleRename(item, item.name, (tid, name) => api.updateEquipmentType(tid, name).then(onTypesChange))}
+          onDelete={async (item) => {
+            if (!confirm(`Remover o tipo "${item.name}"? Os equipamentos dele ficam sem tipo.`)) return
+            await api.deleteEquipmentType(item.id)
+            onTypesChange()
+            onChange()
+          }}
+        />
       </div>
 
       <CreatePanel title="Cadastrar equipamento">
@@ -695,6 +750,22 @@ function EquipmentTab({
         </div>
         <div className="mb-3.5">
           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+            Tipo
+          </label>
+          <select
+            value={typeId}
+            onChange={(e) => setTypeId(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+            style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+          >
+            <option value="">Sem tipo</option>
+            {types.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mb-3.5">
+          <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
             Cor na agenda
           </label>
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-full rounded-lg" style={{ background: 'var(--color-surface)' }} />
@@ -708,7 +779,7 @@ function EquipmentTab({
           Cadastrar equipamento
         </PrimaryButton>
         <p className="mt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          Descrição, foto, AnyDesk, pasta de POPs e módulo vinculado ficam na página{' '}
+          Descrição, foto, identificação, AnyDesk, pasta de POPs e módulo vinculado ficam na página{' '}
           <strong>Equipamentos</strong>, no menu lateral.
         </p>
       </CreatePanel>
@@ -986,6 +1057,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<CurrentUser[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [areas, setAreas] = useState<EquipmentArea[]>([])
+  const [types, setTypes] = useState<EquipmentType[]>([])
 
   const reloadModules = () => {
     api.listModules().then(setModules)
@@ -999,11 +1071,15 @@ export function AdminPage() {
   const reloadAreas = () => {
     api.listEquipmentAreas().then(setAreas)
   }
+  const reloadTypes = () => {
+    api.listEquipmentTypes().then(setTypes)
+  }
 
   useEffect(reloadModules, [])
   useEffect(reloadUsers, [])
   useEffect(reloadEquipment, [])
   useEffect(reloadAreas, [])
+  useEffect(reloadTypes, [])
 
   return (
     <div className="p-6">
@@ -1033,7 +1109,14 @@ export function AdminPage() {
       {tab === 'Grupos' && <GroupsTab users={users} />}
       {tab === 'Módulos' && <ModulesTab modules={modules} users={users} onChange={reloadModules} />}
       {tab === 'Equipamentos' && (
-        <EquipmentTab equipment={equipment} onChange={reloadEquipment} areas={areas} onAreasChange={reloadAreas} />
+        <EquipmentTab
+          equipment={equipment}
+          onChange={reloadEquipment}
+          areas={areas}
+          onAreasChange={reloadAreas}
+          types={types}
+          onTypesChange={reloadTypes}
+        />
       )}
       {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} />}
     </div>

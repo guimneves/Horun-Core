@@ -179,10 +179,12 @@ def test_log_requires_equipment_to_exist(user_a_client):
     assert r.status_code == 404
 
 
-def test_log_rejects_blank_description(super_admin_client, user_a_client):
+def test_log_description_blank_is_fine(super_admin_client, user_a_client):
+    # "Observação" na ficha RUE de papel é opcional — o campo obrigatório
+    # de verdade é o objetivo do uso (ver test_log_rejects_unknown_purpose).
     super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
     r = user_a_client.post("/equipment/re7s/logs", json={"description": "   "})
-    assert r.status_code == 400
+    assert r.status_code == 200
 
 
 def test_author_can_edit_own_log(super_admin_client, user_a_client):
@@ -232,3 +234,158 @@ def test_logs_ordered_most_recent_first(super_admin_client, user_a_client):
     user_a_client.post("/equipment/re7s/logs", json={"description": "segundo", "occurred_at": "2026-02-01T10:00:00"})
     r = user_a_client.get("/equipment/re7s/logs")
     assert [entry["description"] for entry in r.json()] == ["segundo", "primeiro"]
+
+
+# --- Ficha RUE — campos novos (objetivo, código, hora fim, conferência) ---
+
+
+def test_log_default_purpose_is_analise(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post("/equipment/re7s/logs", json={"description": "rotina"})
+    assert r.json()["purpose"] == "AN"
+
+
+def test_log_rejects_unknown_purpose(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post("/equipment/re7s/logs", json={"purpose": "XX"})
+    assert r.status_code == 400
+
+
+def test_log_accepts_experiment_code_and_end_time(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post(
+        "/equipment/re7s/logs",
+        json={
+            "purpose": "MC",
+            "experiment_code": "EXP-042",
+            "occurred_at": "2026-01-01T09:00:00",
+            "ended_at": "2026-01-01T10:30:00",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["experiment_code"] == "EXP-042"
+    assert body["ended_at"] == "2026-01-01T10:30:00"
+
+
+def test_log_description_optional(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    r = user_a_client.post("/equipment/re7s/logs", json={"purpose": "BK"})
+    assert r.status_code == 200
+
+
+def test_admin_can_verify_log(super_admin_client, user_a_client, super_admin_user):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+    assert log["verified_by_id"] is None
+
+    r = super_admin_client.post(f"/equipment/re7s/logs/{log['id']}/verify")
+    assert r.status_code == 200
+    assert r.json()["verified_by_id"] == super_admin_user.id
+    assert r.json()["verified_at"] is not None
+
+
+def test_regular_user_cannot_verify_log(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    log = user_a_client.post("/equipment/re7s/logs", json={"description": "x"}).json()
+    r = user_a_client.post(f"/equipment/re7s/logs/{log['id']}/verify")
+    assert r.status_code == 403
+
+
+# --- Identidade do equipamento (cabeçalho da ficha RUE) --------------------
+
+
+def test_create_equipment_with_identity_fields(super_admin_client):
+    r = super_admin_client.post(
+        "/equipment",
+        json={
+            "id": "gc2014",
+            "display_name": "GC 2014",
+            "manufacturer": "Shimadzu",
+            "model_name": "GC 2014",
+            "serial_number": "C51624300790",
+            "asset_tag": "12345",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["manufacturer"] == "Shimadzu"
+    assert body["serial_number"] == "C51624300790"
+
+
+def test_update_equipment_identity_fields(super_admin_client):
+    super_admin_client.post("/equipment", json={"id": "gc2014", "display_name": "GC 2014"})
+    r = super_admin_client.patch("/equipment/gc2014", json={"manufacturer": "Shimadzu", "model_name": "GC 2014"})
+    assert r.status_code == 200
+    assert r.json()["manufacturer"] == "Shimadzu"
+
+
+# --- Resumo por equipamento (card da grade) --------------------------------
+
+
+def test_equipment_summary_reservations_and_last_used(super_admin_client, user_a_client):
+    from datetime import datetime, timedelta
+
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    user_a_client.post("/equipment/re7s/logs", json={"description": "x"})
+
+    today = datetime.now()
+    start = (today + timedelta(hours=1)).isoformat(timespec="seconds")
+    end = (today + timedelta(hours=2)).isoformat(timespec="seconds")
+    user_a_client.post("/reservations", json={"equipment_id": "re7s", "start_at": start, "end_at": end})
+
+    r = super_admin_client.get("/equipment")
+    body = r.json()[0]
+    assert body["reservations_this_week"] == 1
+    assert body["last_used_at"] is not None
+
+
+# --- Tipos de equipamento ----------------------------------------------------
+
+
+def test_create_type_requires_super_admin(user_a_client):
+    r = user_a_client.post("/equipment-types", json={"name": "Cromatógrafo"})
+    assert r.status_code == 403
+
+
+def test_create_list_update_delete_type(super_admin_client):
+    r = super_admin_client.post("/equipment-types", json={"name": "Cromatógrafo"})
+    assert r.status_code == 200
+    type_id = r.json()["id"]
+
+    r2 = super_admin_client.get("/equipment-types")
+    assert [t["name"] for t in r2.json()] == ["Cromatógrafo"]
+
+    r3 = super_admin_client.patch(f"/equipment-types/{type_id}", json={"name": "Cromatógrafo gasoso"})
+    assert r3.status_code == 200
+    assert r3.json()["name"] == "Cromatógrafo gasoso"
+
+    r4 = super_admin_client.delete(f"/equipment-types/{type_id}")
+    assert r4.status_code == 200
+    assert super_admin_client.get("/equipment-types").json() == []
+
+
+def test_create_equipment_rejects_unknown_type(super_admin_client):
+    r = super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S", "type_id": 999})
+    assert r.status_code == 400
+
+
+def test_assign_and_clear_equipment_type(super_admin_client):
+    t = super_admin_client.post("/equipment-types", json={"name": "Cromatógrafo"}).json()
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S", "type_id": t["id"]})
+
+    r = super_admin_client.get("/equipment")
+    assert r.json()[0]["type_id"] == t["id"]
+
+    r2 = super_admin_client.patch("/equipment/re7s", json={"clear_type": True})
+    assert r2.json()["type_id"] is None
+
+
+def test_deleting_type_clears_it_from_equipment(super_admin_client):
+    t = super_admin_client.post("/equipment-types", json={"name": "Cromatógrafo"}).json()
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S", "type_id": t["id"]})
+
+    super_admin_client.delete(f"/equipment-types/{t['id']}")
+
+    eq = super_admin_client.get("/equipment").json()[0]
+    assert eq["type_id"] is None

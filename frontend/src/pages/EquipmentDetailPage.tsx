@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError, type Equipment, type EquipmentArea, type ModuleFull, type ModuleStatus } from '../api/client'
+import { api, ApiError, type Equipment, type EquipmentArea, type EquipmentType, type ModuleFull, type ModuleStatus } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { EquipmentPhoto } from '../components/EquipmentPhoto'
+import { EquipmentQrCode } from '../components/EquipmentQrCode'
 import { EquipmentWeekGrid } from '../components/EquipmentWeekGrid'
 import { UsageLogSection } from '../components/UsageLogSection'
 import { ChevronLeftIcon } from '../icons'
@@ -51,6 +52,7 @@ export function EquipmentDetailPage() {
 
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [areas, setAreas] = useState<EquipmentArea[]>([])
+  const [types, setTypes] = useState<EquipmentType[]>([])
   const [modules, setModules] = useState<ModuleStatus[]>([])
   const [moduleFulls, setModuleFulls] = useState<ModuleFull[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -60,14 +62,19 @@ export function EquipmentDetailPage() {
   const [anydesk, setAnydesk] = useState('')
   const [pop, setPop] = useState('')
   const [icon, setIcon] = useState('')
+  const [manufacturer, setManufacturer] = useState('')
+  const [modelName, setModelName] = useState('')
+  const [serialNumber, setSerialNumber] = useState('')
+  const [assetTag, setAssetTag] = useState('')
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   function reload() {
-    Promise.all([api.listEquipment(), api.listEquipmentAreas(), api.dashboardModules()])
-      .then(([eq, ar, mo]) => {
+    Promise.all([api.listEquipment(), api.listEquipmentAreas(), api.listEquipmentTypes(), api.dashboardModules()])
+      .then(([eq, ar, ty, mo]) => {
         setEquipment(eq)
         setAreas(ar)
+        setTypes(ty)
         setModules(mo)
         setLoaded(true)
       })
@@ -88,6 +95,10 @@ export function EquipmentDetailPage() {
     setDescription(eq.description)
     setAnydesk(eq.anydesk_id)
     setPop(eq.pop_folder_path)
+    setManufacturer(eq.manufacturer)
+    setModelName(eq.model_name)
+    setSerialNumber(eq.serial_number)
+    setAssetTag(eq.asset_tag)
     setError(null)
   }, [eq?.id])
 
@@ -226,6 +237,23 @@ export function EquipmentDetailPage() {
             <p className="mb-4 text-sm">{areas.find((a) => a.id === eq.area_id)?.name ?? 'Sem área'}</p>
           )}
 
+          <label className={labelCls} style={labelStyle}>Tipo</label>
+          {isAdmin ? (
+            <select
+              value={eq.type_id ?? ''}
+              onChange={(e) => save(e.target.value ? { type_id: Number(e.target.value) } : { clear_type: true })}
+              className={`mb-4 ${field}`}
+              style={fieldStyle}
+            >
+              <option value="">Sem tipo</option>
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="mb-4 text-sm">{types.find((t) => t.id === eq.type_id)?.name ?? 'Sem tipo'}</p>
+          )}
+
           <label className={labelCls} style={labelStyle}>Descrição</label>
           {isAdmin ? (
             <textarea
@@ -348,6 +376,85 @@ export function EquipmentDetailPage() {
           )}
         </Card>
 
+        <Card>
+          <label className={labelCls} style={labelStyle}>Fabricante</label>
+          {isAdmin ? (
+            <input
+              value={manufacturer}
+              onChange={(e) => setManufacturer(e.target.value)}
+              onBlur={() => manufacturer !== eq.manufacturer && save({ manufacturer })}
+              placeholder="ex.: Shimadzu"
+              className={`mb-3 ${field}`}
+              style={fieldStyle}
+            />
+          ) : (
+            <p className="mb-3 text-sm" style={{ color: eq.manufacturer ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+              {eq.manufacturer || '—'}
+            </p>
+          )}
+
+          <label className={labelCls} style={labelStyle}>Modelo</label>
+          {isAdmin ? (
+            <input
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+              onBlur={() => modelName !== eq.model_name && save({ model_name: modelName })}
+              placeholder="ex.: GC 2014"
+              className={`mb-3 ${field}`}
+              style={fieldStyle}
+            />
+          ) : (
+            <p className="mb-3 text-sm" style={{ color: eq.model_name ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+              {eq.model_name || '—'}
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls} style={labelStyle}>Número de série</label>
+              {isAdmin ? (
+                <input
+                  value={serialNumber}
+                  onChange={(e) => setSerialNumber(e.target.value)}
+                  onBlur={() => serialNumber !== eq.serial_number && save({ serial_number: serialNumber })}
+                  className={field}
+                  style={fieldStyle}
+                />
+              ) : (
+                <p className="text-sm" style={{ color: eq.serial_number ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                  {eq.serial_number || '—'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className={labelCls} style={labelStyle}>Patrimônio</label>
+              {isAdmin ? (
+                <input
+                  value={assetTag}
+                  onChange={(e) => setAssetTag(e.target.value)}
+                  onBlur={() => assetTag !== eq.asset_tag && save({ asset_tag: assetTag })}
+                  className={field}
+                  style={fieldStyle}
+                />
+              ) : (
+                <p className="text-sm" style={{ color: eq.asset_tag ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+                  {eq.asset_tag || '—'}
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <label className={labelCls} style={labelStyle}>QR code</label>
+          <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Imprima e cole na bancada — aponta direto pra esta página.
+          </p>
+          <EquipmentQrCode equipmentName={eq.display_name} />
+        </Card>
+      </div>
+
+      <div className="mb-6">
         <Card>
           <UsageLogSection equipmentId={eq.id} />
         </Card>

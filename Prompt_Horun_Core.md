@@ -158,6 +158,17 @@ Pedido do usuário: o Horun (Core e/ou módulos específicos) deve conseguir gra
   - +45 testes (`tests/test_equipment.py`), 192 no total. Validado no navegador de ponta a ponta (área, equipamento, vínculo de módulo com troca de ícone, AnyDesk, POPs, registro de uso criado e editado).
   - **Falta (Fase C, futura)**: sincronizar esse RUE do Core com o histórico interno de cada módulo (RE7S etc.) — depende de cada módulo expor os dados de um jeito compatível; não desenhado ainda.
 
+- **Equipamentos — página de detalhe própria, ficha RUE completa e filtros, implementado em 2026-09-15**:
+  - **Página de detalhe** (`/equipamentos/:id`, substitui o painel lateral): clicar no card anima direto pra ela via **View Transitions API nativa** (`<Link viewTransition>` do React Router + `view-transition-name` compartilhado na foto — sem lib nova, sem suporte cai pra navegação normal). Layout em cards largos em vez do painel de 320px.
+  - **Mini-agenda semanal** (`EquipmentWeekGrid`) — grade de verdade (dias × horas, cor do equipamento), só daquele equipamento, mesmo `ReservationPanel` da Agenda principal (extraído pra componente próprio) — sem arrastar/redimensionar (exclusivo de `/agenda`); as duas telas compartilham a mesma API, uma reserva feita numa aparece na outra.
+  - **Ficha de utilização (RUE) — agora no formato real da ficha de papel do laboratório** (`RUE modelo.doc`, aberto via automação do Word pra extrair os campos): `EquipmentLog` ganhou `purpose` (objetivo do uso — códigos fixos `USAGE_PURPOSES` = AN/AC/BK/MC/NT/LP/OU/NA, mesma legenda da ficha de papel), `experiment_code`, `ended_at` (hora fim, além do `occurred_at` que já era a hora início), e `verified_by_id`/`verified_at` ("Conferido por" — só o administrador máximo confere, não precisa ser quem registrou). Renderizada como tabela (Data/Objetivo/Início/Fim/Código/Usuário/Observação/Conferência/Ações) na própria página do equipamento.
+  - **Identidade do equipamento**: `Equipment` ganhou `manufacturer`, `model_name`, `serial_number`, `asset_tag` — mesmos campos do cabeçalho da ficha RUE de papel.
+  - **`EquipmentType`** (nova tabela, mesmo padrão de `EquipmentArea` — CRUD, chips no Admin) — eixo de filtro independente da área física: área é onde o equipamento fica, tipo é o que ele é. Página Equipamentos ganhou busca por nome/descrição + filtro por área + filtro por tipo, todos combináveis.
+  - **Badge de status no card**: se o equipamento tem módulo vinculado, mostra uma bolinha verde/vermelha (status do dashboard de módulos) no canto da foto; clicar nela abre o módulo direto (não a página do equipamento) quando há acesso e é embutível.
+  - **Resumo de uso no card**: "N reservas esta semana" (contagem por equipamento, calculada no backend) e "usado há X" (baseado no `EquipmentLog` mais recente, não em reservas — é o uso de fato, não a intenção de uso).
+  - **QR code** (`qrcode` + `@types/qrcode`, novas dependências) na página de detalhe — aponta pra própria URL, com botão "imprimir" (CSS `@media print` isola só o QR + nome).
+  - +21 testes (`tests/test_equipment.py`, `tests/test_modules.py`), 213 no total. Validado no navegador de ponta a ponta.
+
 **Ainda não implementado**:
 
 1. **Plugar os módulos da Juliana (Amostras, Reagentes)** — situação em 2026-09-14:

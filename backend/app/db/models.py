@@ -237,6 +237,16 @@ class EquipmentArea(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class EquipmentType(SQLModel, table=True):
+    """Tipo/categoria do equipamento (ex. "Cromatógrafo gasoso") — eixo de
+    filtro independente da área física (`EquipmentArea`): a área é onde
+    o equipamento fica, o tipo é o que ele é."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Equipment(SQLModel, table=True):
     """Equipamento reservável na Agenda — conceito separado de `Module`:
     nem todo equipamento tem módulo de software (ex. balança analítica), e
@@ -248,9 +258,16 @@ class Equipment(SQLModel, table=True):
     color: str = "#15216f"  # usada na legenda/blocos da Agenda
     description: str = ""
     area_id: Optional[int] = Field(default=None, foreign_key="equipmentarea.id", index=True)
+    type_id: Optional[int] = Field(default=None, foreign_key="equipmenttype.id", index=True)
     module_id: Optional[str] = Field(default=None, foreign_key="module.id", index=True)
     anydesk_id: str = ""
     pop_folder_path: str = ""
+    # Identidade do equipamento — mesmos campos do cabeçalho da ficha RUE
+    # de papel do laboratório (RUE modelo.doc).
+    manufacturer: str = ""
+    model_name: str = ""
+    serial_number: str = ""
+    asset_tag: str = ""  # "Patrimônio"
     # Foto servida separada (GET /equipment/{id}/photo), mesmo padrão da
     # foto de perfil do usuário — não pesa a listagem carregando bytes à
     # toa (ver User.photo em routes_auth.py).
@@ -259,21 +276,37 @@ class Equipment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+# Códigos de "objetivo do uso" da ficha RUE de papel do laboratório
+# (RUE modelo.doc) — a pessoa escreve o código na coluna, a legenda do
+# rodapé explica cada um. Mesmos códigos aqui, pra ficha digital ficar
+# reconhecível pra quem já usa a de papel.
+USAGE_PURPOSES = ["AN", "AC", "BK", "MC", "NT", "LP", "OU", "NA"]
+
+
 class EquipmentLog(SQLModel, table=True):
-    """Registro de uso do equipamento (RUE) na própria página do Core —
-    Fase B, manual: quem usou anota o que fez. Não é sincronizado com o
-    histórico interno de cada módulo (RE7S etc.) ainda — isso é a Fase C,
-    combinada com o usuário como trabalho futuro."""
+    """Ficha de utilização do equipamento (RUE) na própria página do
+    Core — Fase B, manual, no mesmo formato da ficha de papel do
+    laboratório (data, objetivo do uso, hora início/fim, código do
+    experimento, usuário, observação, conferência). Não é sincronizado
+    com o histórico interno de cada módulo (RE7S etc.) ainda — isso é a
+    Fase C, combinada com o usuário como trabalho futuro."""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     equipment_id: str = Field(foreign_key="equipment.id", index=True)
     user_id: int = Field(foreign_key="user.id", index=True)
-    description: str
+    purpose: str = "AN"  # ver USAGE_PURPOSES
+    experiment_code: str = ""
+    description: str = ""  # "Observação" na ficha
     # Naive (hora local do laboratório), mesma convenção do
     # start_at/end_at de Reservation — sempre sobrescrito pela rota, este
     # default só cobre a criação direta do objeto (ex. em teste/script).
     occurred_at: datetime = Field(default_factory=datetime.now)
+    ended_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=utcnow)
+    # Conferência — mesmo espírito do "Conferido por" da ficha de papel.
+    # Só o administrador máximo confere (não precisa ser quem registrou).
+    verified_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    verified_at: Optional[datetime] = None
 
 
 class Reservation(SQLModel, table=True):

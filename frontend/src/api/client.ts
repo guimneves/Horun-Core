@@ -174,10 +174,17 @@ export interface Equipment {
   color: string
   description: string
   area_id: number | null
+  type_id: number | null
   module_id: string | null
   anydesk_id: string
   pop_folder_path: string
+  manufacturer: string
+  model_name: string
+  serial_number: string
+  asset_tag: string
   has_photo: boolean
+  reservations_this_week: number
+  last_used_at: string | null
 }
 
 export interface EquipmentArea {
@@ -185,14 +192,38 @@ export interface EquipmentArea {
   name: string
 }
 
+export interface EquipmentType {
+  id: number
+  name: string
+}
+
+// Códigos de "objetivo do uso" da ficha RUE de papel do laboratório —
+// mesmos códigos, pra ficha digital ficar reconhecível.
+export const USAGE_PURPOSES: { code: string; label: string }[] = [
+  { code: 'AN', label: 'AN — Análise' },
+  { code: 'AC', label: 'AC — Análise acoplada a' },
+  { code: 'BK', label: 'BK — Background' },
+  { code: 'MC', label: 'MC — Manutenção Corretiva' },
+  { code: 'NT', label: 'NT — Adição de Nitrogênio' },
+  { code: 'LP', label: 'LP — Limpeza' },
+  { code: 'OU', label: 'OU — Outros' },
+  { code: 'NA', label: 'NA — Não se Aplica' },
+]
+
 export interface EquipmentLog {
   id: number
   equipment_id: string
+  purpose: string
+  experiment_code: string
   description: string
   occurred_at: string
+  ended_at: string | null
   created_at: string
   user_id: number
   user_display_name: string
+  verified_by_id: number | null
+  verified_by_name: string | null
+  verified_at: string | null
 }
 
 export interface Reservation {
@@ -382,9 +413,14 @@ export const api = {
     color?: string
     description?: string
     area_id?: number | null
+    type_id?: number | null
     module_id?: string | null
     anydesk_id?: string
     pop_folder_path?: string
+    manufacturer?: string
+    model_name?: string
+    serial_number?: string
+    asset_tag?: string
   }) => request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
   updateEquipment: (
     equipmentId: string,
@@ -394,10 +430,16 @@ export const api = {
       description: string
       area_id: number | null
       clear_area: boolean
+      type_id: number | null
+      clear_type: boolean
       module_id: string | null
       clear_module: boolean
       anydesk_id: string
       pop_folder_path: string
+      manufacturer: string
+      model_name: string
+      serial_number: string
+      asset_tag: string
     }>,
   ) => request<Equipment>(`/equipment/${equipmentId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteEquipment: (equipmentId: string) =>
@@ -428,11 +470,33 @@ export const api = {
   deleteEquipmentArea: (areaId: number) =>
     request<{ ok: boolean }>(`/equipment-areas/${areaId}`, { method: 'DELETE' }),
 
+  listEquipmentTypes: () => request<EquipmentType[]>('/equipment-types'),
+  createEquipmentType: (name: string) =>
+    request<EquipmentType>('/equipment-types', { method: 'POST', body: JSON.stringify({ name }) }),
+  updateEquipmentType: (typeId: number, name: string) =>
+    request<EquipmentType>(`/equipment-types/${typeId}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteEquipmentType: (typeId: number) =>
+    request<{ ok: boolean }>(`/equipment-types/${typeId}`, { method: 'DELETE' }),
+
   listEquipmentLogs: (equipmentId: string) => request<EquipmentLog[]>(`/equipment/${equipmentId}/logs`),
-  createEquipmentLog: (equipmentId: string, description: string) =>
-    request<EquipmentLog>(`/equipment/${equipmentId}/logs`, { method: 'POST', body: JSON.stringify({ description }) }),
-  updateEquipmentLog: (equipmentId: string, logId: number, description: string) =>
-    request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify({ description }) }),
+  createEquipmentLog: (
+    equipmentId: string,
+    payload: { purpose: string; experiment_code?: string; description?: string; occurred_at?: string; ended_at?: string | null },
+  ) => request<EquipmentLog>(`/equipment/${equipmentId}/logs`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateEquipmentLog: (
+    equipmentId: string,
+    logId: number,
+    payload: Partial<{
+      purpose: string
+      experiment_code: string
+      description: string
+      occurred_at: string
+      ended_at: string | null
+      clear_ended_at: boolean
+    }>,
+  ) => request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  verifyEquipmentLog: (equipmentId: string, logId: number) =>
+    request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}/verify`, { method: 'POST' }),
   deleteEquipmentLog: (equipmentId: string, logId: number) =>
     request<{ ok: boolean }>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'DELETE' }),
 
