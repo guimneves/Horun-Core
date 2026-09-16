@@ -109,6 +109,21 @@ def create_db_and_tables() -> None:
 
 Cada repositório só precisa das linhas relevantes a ele. A partir de agora, sempre que adicionar um campo num modelo que já tem tabela em produção, é só somar uma chamada de `_ensure_column` — sem isso, todo `git pull` + rebuild no servidor tem chance de derrubar o módulo de novo.
 
+## Aconteceu de novo (2026-09-16) — faltou só a linha do campo mais novo
+
+Boa notícia primeiro: você já aplicou o padrão acima no `Controle-Analitico` (`app/core/db.py` já tem `_ensure_column` pra `equipment.group` e `sample.equipment_ids`, com direito a backfill — ficou bem feito). O problema agora é só que o campo **`observacoes`**, que entrou depois tanto em `Sample` quanto em `SampleRequest`, não ganhou a chamada correspondente ainda — o backend caiu em loop de reinício de novo com `UndefinedColumn: sample.observacoes`.
+
+Fix: soma essas duas linhas dentro de `create_db_and_tables()`, junto das que já existem:
+
+```python
+_ensure_column("sample", "observacoes", "VARCHAR")
+_ensure_column("samplerequest", "observacoes", "VARCHAR")
+```
+
+(Repare que sua própria `_ensure_column` já não recebe `engine` como parâmetro — ela usa o `engine` do módulo direto — então é só chamar `_ensure_column("tabela", "coluna", "TIPO")`, do jeito que as duas linhas que já existem fazem.)
+
+Vale virar hábito: toda vez que somar um campo num modelo que já tem tabela em produção (`Sample`, `SampleRequest`, `Equipment`, `ModuleMembership`...), já soma a linha de `_ensure_column` no mesmo commit — evita esse mesmo susto de novo.
+
 ## Depois de aplicar
 
 1. Commit e push normalmente, cada repositório no seu próprio ritmo.
