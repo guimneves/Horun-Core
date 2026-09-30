@@ -662,6 +662,7 @@ function EquipmentTab({
   onAreasChange,
   types,
   onTypesChange,
+  loadError,
 }: {
   equipment: Equipment[]
   onChange: () => void
@@ -669,6 +670,7 @@ function EquipmentTab({
   onAreasChange: () => void
   types: EquipmentType[]
   onTypesChange: () => void
+  loadError?: string | null
 }) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -706,6 +708,11 @@ function EquipmentTab({
   return (
     <div className="flex gap-5">
       <div className="flex-1">
+        {loadError && (
+          <p className="mb-3 text-sm" style={{ color: '#d43b3b' }}>
+            {loadError}
+          </p>
+        )}
         <Table>
           <thead>
             <tr>
@@ -1188,6 +1195,7 @@ export function AdminPage() {
   const [modules, setModules] = useState<ModuleFull[]>([])
   const [users, setUsers] = useState<CurrentUser[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
+  const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [areas, setAreas] = useState<EquipmentArea[]>([])
   const [types, setTypes] = useState<EquipmentType[]>([])
 
@@ -1198,7 +1206,11 @@ export function AdminPage() {
     api.listUsers().then(setUsers)
   }
   const reloadEquipment = () => {
-    api.listEquipment().then(setEquipment)
+    setEquipmentError(null)
+    api
+      .listEquipment()
+      .then(setEquipment)
+      .catch((err) => setEquipmentError(err instanceof ApiError ? err.message : 'Não foi possível carregar os equipamentos.'))
   }
   const reloadAreas = () => {
     api.listEquipmentAreas().then(setAreas)
@@ -1248,6 +1260,7 @@ export function AdminPage() {
           onAreasChange={reloadAreas}
           types={types}
           onTypesChange={reloadTypes}
+          loadError={equipmentError}
         />
       )}
       {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} onModulesChange={reloadModules} />}

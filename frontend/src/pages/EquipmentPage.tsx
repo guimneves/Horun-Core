@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, API_BASE, type Equipment, type EquipmentArea, type EquipmentType, type ModuleStatus } from '../api/client'
+import { ApiError, api, API_BASE, type Equipment, type EquipmentArea, type EquipmentType, type ModuleStatus } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { timeAgo } from '../lib/datetime'
 
@@ -55,10 +55,17 @@ export function EquipmentPage() {
   const [search, setSearch] = useState('')
   const [areaFilter, setAreaFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const isAdmin = !!user?.is_super_admin
 
   useEffect(() => {
-    api.listEquipment().then(setEquipment).catch(() => {})
+    // Sem isto, uma falha aqui (ex. backend desatualizado numa coluna
+    // nova) ficava indistinguível de "nenhum equipamento cadastrado" —
+    // a lista simplesmente ficava vazia, sem nenhum aviso.
+    api
+      .listEquipment()
+      .then(setEquipment)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os equipamentos.'))
     api.listEquipmentAreas().then(setAreas).catch(() => {})
     api.listEquipmentTypes().then(setTypes).catch(() => {})
     api.dashboardModules().then(setModules).catch(() => {})
@@ -126,7 +133,8 @@ export function EquipmentPage() {
         </select>
       </div>
 
-      {equipment.length === 0 && (
+      {error && <p style={{ color: '#d43b3b' }}>{error}</p>}
+      {!error && equipment.length === 0 && (
         <p style={{ color: 'var(--color-text-muted)' }}>
           Nenhum equipamento cadastrado ainda{isAdmin ? ' — cadastre em Administração → Equipamentos.' : '.'}
         </p>
