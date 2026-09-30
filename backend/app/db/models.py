@@ -22,11 +22,23 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from pydantic import NaiveDatetime
 from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# `datetime` puro (com tzinfo, via utcnow() acima) pros campos "quando isto
+# foi criado no sistema" (created_at/added_at/granted_at). `NaiveDatetime`
+# pros campos que guardam hora local do laboratório sem timezone
+# (start_at/end_at de Event/Reservation, occurred_at/ended_at/verified_at
+# de EquipmentLog) — sem isto, versões recentes do SQLModel assumem
+# `DateTime(timezone=True)` por padrão e rejeitam o datetime.now() ingênuo
+# que essas rotas usam (ver app/api/routes_equipment.py,
+# routes_reservations.py, routes_events.py), derrubando qualquer consulta
+# com "Datetime values must have timezone information".
 
 
 # Listas fechadas — pedido do usuário. Guardadas como texto simples (não
@@ -242,8 +254,8 @@ class Event(SQLModel, table=True):
     title: str
     description: str = ""
     location: str = ""
-    start_at: datetime
-    end_at: datetime
+    start_at: NaiveDatetime
+    end_at: NaiveDatetime
     all_day: bool = Field(default=False)
     # NULL = evento do laboratório (só super-admin cria, todos veem);
     # preenchido = evento do grupo (só o admin interno cria, só membros veem).
@@ -333,13 +345,13 @@ class EquipmentLog(SQLModel, table=True):
     # Naive (hora local do laboratório), mesma convenção do
     # start_at/end_at de Reservation — sempre sobrescrito pela rota, este
     # default só cobre a criação direta do objeto (ex. em teste/script).
-    occurred_at: datetime = Field(default_factory=datetime.now)
-    ended_at: Optional[datetime] = None
+    occurred_at: NaiveDatetime = Field(default_factory=datetime.now)
+    ended_at: Optional[NaiveDatetime] = None
     created_at: datetime = Field(default_factory=utcnow)
     # Conferência — mesmo espírito do "Conferido por" da ficha de papel.
     # Só o administrador máximo confere (não precisa ser quem registrou).
     verified_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
-    verified_at: Optional[datetime] = None
+    verified_at: Optional[NaiveDatetime] = None
 
 
 class Reservation(SQLModel, table=True):
@@ -351,6 +363,6 @@ class Reservation(SQLModel, table=True):
     equipment_id: str = Field(foreign_key="equipment.id", index=True)
     user_id: int = Field(foreign_key="user.id", index=True)
     title: str = ""
-    start_at: datetime
-    end_at: datetime
+    start_at: NaiveDatetime
+    end_at: NaiveDatetime
     created_at: datetime = Field(default_factory=utcnow)
