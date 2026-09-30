@@ -52,7 +52,39 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
 
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordSavedAt, setPasswordSavedAt] = useState<number | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+
   if (!user) return null
+
+  async function handleChangePassword(e: FormEvent) {
+    e.preventDefault()
+    setPasswordError(null)
+    if (newPassword.length < 6) {
+      setPasswordError('A nova senha precisa ter pelo menos 6 caracteres.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('A confirmação não bate com a nova senha.')
+      return
+    }
+    setPasswordSaving(true)
+    try {
+      await api.changeMyPassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordSavedAt(Date.now())
+    } catch (err) {
+      setPasswordError(err instanceof ApiError ? err.message : 'Falha ao trocar a senha.')
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
 
   async function handleSave(e: FormEvent) {
     e.preventDefault()
@@ -208,6 +240,37 @@ export function ProfilePage() {
           style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
         >
           {saving ? 'Salvando…' : 'Salvar perfil'}
+        </button>
+      </form>
+
+      <form
+        onSubmit={handleChangePassword}
+        className="mt-6 rounded-2xl border p-5"
+        style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+      >
+        <div className="mb-4 text-[15px] font-semibold">Trocar senha</div>
+        <Field label="Senha atual" type="password" value={currentPassword} onChange={setCurrentPassword} />
+        <Field label="Nova senha" type="password" value={newPassword} onChange={setNewPassword} placeholder="mínimo 6 caracteres" />
+        <Field label="Confirmar nova senha" type="password" value={confirmPassword} onChange={setConfirmPassword} />
+
+        {passwordError && (
+          <p className="mb-4 text-sm" style={{ color: '#d43b3b' }}>
+            {passwordError}
+          </p>
+        )}
+        {passwordSavedAt && !passwordError && (
+          <p className="mb-4 text-sm" style={{ color: 'var(--color-primary)' }}>
+            Senha alterada.
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+          className="rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
+          style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+        >
+          {passwordSaving ? 'Salvando…' : 'Trocar senha'}
         </button>
       </form>
     </div>

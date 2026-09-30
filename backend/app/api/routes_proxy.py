@@ -35,8 +35,8 @@ _HOP_BY_HOP = {
 }
 
 
-def _has_access(session: SessionDep, user_id: int, is_super_admin: bool, module_id: str) -> bool:
-    if is_super_admin:
+def _has_access(session: SessionDep, user_id: int, is_super_admin: bool, module_id: str, module_public: bool) -> bool:
+    if is_super_admin or module_public:
         return True
     grant = session.exec(
         select(UserModuleAccess)
@@ -63,7 +63,7 @@ async def proxy(module_id: str, path: str, request: Request, user: CurrentUser, 
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
 
-    if not _has_access(session, user.id, user.is_super_admin, module_id):
+    if not _has_access(session, user.id, user.is_super_admin, module_id, module.public):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para este módulo")
 
     is_api_call = path == "api" or path.startswith("api/")

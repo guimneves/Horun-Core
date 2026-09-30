@@ -93,6 +93,8 @@ export interface ModuleFull {
   internal_base_url: string
   health_path: string
   internal_frontend_url: string
+  public: boolean
+  unlisted: boolean
 }
 
 export interface ModuleAccessEntry {
@@ -165,6 +167,14 @@ export interface Notification {
   actor_id: number | null
   actor_display_name: string
   read: boolean
+  created_at: string
+}
+
+export interface Suggestion {
+  id: number
+  text: string
+  status: 'novo' | 'lida' | 'arquivada' | string
+  author_name: string
   created_at: string
 }
 
@@ -317,6 +327,11 @@ export const api = {
     return res.json() as Promise<CurrentUser>
   },
   deleteMyPhoto: () => request<CurrentUser>('/auth/me/photo', { method: 'DELETE' }),
+  changeMyPassword: (currentPassword: string, newPassword: string) =>
+    request<CurrentUser>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 
   listUsers: () => request<CurrentUser[]>('/users'),
   usersDirectory: () => request<DirectoryEntry[]>('/users/directory'),
@@ -356,6 +371,10 @@ export const api = {
   updateModule: (moduleId: string, payload: ModuleFull) =>
     request<ModuleFull>(`/modules/${moduleId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteModule: (moduleId: string) => request<{ ok: boolean }>(`/modules/${moduleId}`, { method: 'DELETE' }),
+  setModulePublic: (moduleId: string, isPublic: boolean) =>
+    request<ModuleFull>(`/modules/${moduleId}/public`, { method: 'PATCH', body: JSON.stringify({ public: isPublic }) }),
+  setModuleUnlisted: (moduleId: string, unlisted: boolean) =>
+    request<ModuleFull>(`/modules/${moduleId}/unlisted`, { method: 'PATCH', body: JSON.stringify({ unlisted }) }),
 
   listModuleAccess: (moduleId: string) => request<ModuleAccessEntry[]>(`/modules/${moduleId}/access`),
   grantModuleAccess: (moduleId: string, userId: number) =>
@@ -391,7 +410,11 @@ export const api = {
   },
   pinPost: (postId: number, pinned: boolean) =>
     request<Post>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
+  editPost: (postId: number, content: string) =>
+    request<Post>(`/posts/${postId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
   deletePost: (postId: number) => request<{ ok: boolean }>(`/posts/${postId}`, { method: 'DELETE' }),
+  editReply: (postId: number, replyId: number, content: string) =>
+    request<PostReply>(`/posts/${postId}/replies/${replyId}`, { method: 'PATCH', body: JSON.stringify({ content }) }),
 
   createReply: (postId: number, content: string) =>
     request<PostReply>(`/posts/${postId}/replies`, { method: 'POST', body: JSON.stringify({ content }) }),
@@ -405,6 +428,14 @@ export const api = {
   listNotifications: () => request<Notification[]>('/notifications'),
   unreadNotificationCount: () => request<{ count: number }>('/notifications/unread-count'),
   markNotificationsRead: () => request<{ ok: boolean }>('/notifications/mark-read', { method: 'POST' }),
+
+  createSuggestion: (text: string) =>
+    request<{ ok: boolean }>('/suggestions', { method: 'POST', body: JSON.stringify({ text }) }),
+  listSuggestions: () => request<Suggestion[]>('/suggestions'),
+  unreadSuggestionCount: () => request<{ count: number }>('/suggestions/unread-count'),
+  updateSuggestionStatus: (id: number, status: string) =>
+    request<{ ok: boolean }>(`/suggestions/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  deleteSuggestion: (id: number) => request<{ ok: boolean }>(`/suggestions/${id}`, { method: 'DELETE' }),
 
   listEquipment: () => request<Equipment[]>('/equipment'),
   createEquipment: (payload: {

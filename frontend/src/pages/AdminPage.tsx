@@ -173,6 +173,15 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   const [justCreated, setJustCreated] = useState<{ username: string; code: string } | null>(null)
   const [regenerated, setRegenerated] = useState<{ username: string; code: string } | null>(null)
 
+  // Qualquer ação de linha (posição, qualificação, papel, renomear,
+  // código, excluir) passa por aqui — sem isto, uma falha (permissão,
+  // sessão expirada, erro do servidor) não aparecia em lugar nenhum: o
+  // clique simplesmente não fazia nada, sem nenhuma mensagem.
+  function runAction(promise: Promise<unknown>) {
+    setError(null)
+    promise.then(onChange).catch((err) => setError(err instanceof ApiError ? err.message : 'Ação não pôde ser concluída.'))
+  }
+
   async function handleCreate() {
     setError(null)
     setJustCreated(null)
@@ -195,9 +204,27 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   }
 
   async function handleRegenerate(u: CurrentUser) {
-    const updated = await api.regenerateSetupCode(u.id)
-    if (updated.setup_code) setRegenerated({ username: updated.username, code: updated.setup_code })
-    onChange()
+    // Quando a conta já tem senha (não está "aguardando 1º acesso"), este
+    // botão apaga a senha atual e volta a pessoa pro fluxo de código —
+    // ela para de conseguir entrar até usar o código novo. Sem esta
+    // confirmação, um clique de vista trocado com "renomear"/"remover"
+    // (mesma linha, mesmo estilo) já causou isso sem ninguém notar na
+    // hora — só reaparece depois como "aguardando 1º acesso" de novo.
+    if (
+      !u.setup_code &&
+      !confirm(
+        `"${u.display_name || u.username}" já tem senha definida. Gerar um novo código apaga a senha atual — a pessoa só entra de novo usando o código. Continuar?`,
+      )
+    )
+      return
+    setError(null)
+    try {
+      const updated = await api.regenerateSetupCode(u.id)
+      if (updated.setup_code) setRegenerated({ username: updated.username, code: updated.setup_code })
+      onChange()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível gerar o código de acesso.')
+    }
   }
 
   async function handleRename(u: CurrentUser) {
@@ -284,7 +311,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                     disabled={u.is_protected}
                     placeholder="—"
                     options={POSITIONS}
-                    onChange={(value) => api.updateUser(u.id, { position: value }).then(onChange)}
+                    onChange={(value) => runAction(api.updateUser(u.id, { position: value }))}
                   />
                 </Td>
                 <Td>
@@ -293,7 +320,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                     disabled={u.is_protected}
                     placeholder="—"
                     options={QUALIFICATIONS}
-                    onChange={(value) => api.updateUser(u.id, { qualification: value }).then(onChange)}
+                    onChange={(value) => runAction(api.updateUser(u.id, { qualification: value }))}
                   />
                 </Td>
                 <Td>
@@ -334,7 +361,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                       <button
                         className="text-xs"
                         style={{ color: 'var(--color-text-muted)' }}
-                        onClick={() => api.updateUser(u.id, { is_super_admin: !u.is_super_admin }).then(onChange)}
+                        onClick={() => runAction(api.updateUser(u.id, { is_super_admin: !u.is_super_admin }))}
                       >
                         {u.is_super_admin ? 'remover admin' : 'tornar admin'}
                       </button>
@@ -350,7 +377,14 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                       </button>
                     )}
                     {!u.is_protected && (
-                      <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteUser(u.id).then(onChange)}>
+                      <button
+                        className="text-xs"
+                        style={{ color: '#d43b3b' }}
+                        onClick={() => {
+                          if (confirm(`Excluir o usuário "${u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
+                            runAction(api.deleteUser(u.id))
+                        }}
+                      >
                         remover
                       </button>
                     )}
@@ -487,6 +521,8 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
         internal_base_url: baseUrl,
         health_path: '/health',
         internal_frontend_url: frontendUrl,
+        public: false,
+        unlisted: false,
       })
       setId('')
       setDisplayName('')
@@ -787,10 +823,22 @@ function EquipmentTab({
   )
 }
 
-function PermissionsTab({ modules, users }: { modules: ModuleFull[]; users: CurrentUser[] }) {
+function PermissionsTab({
+  modules,
+  users,
+  onModulesChange,
+}: {
+  modules: ModuleFull[]
+  users: CurrentUser[]
+  onModulesChange: () => void
+}) {
   const [moduleId, setModuleId] = useState('')
   const [access, setAccess] = useState<ModuleAccessEntry[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [togglingPublic, setTogglingPublic] = useState(false)
+  const [togglingUnlisted, setTogglingUnlisted] = useState(false)
+
+  const selectedModule = modules.find((m) => m.id === moduleId) ?? null
 
   useEffect(() => {
     if (moduleId) api.listModuleAccess(moduleId).then(setAccess)
@@ -799,6 +847,28 @@ function PermissionsTab({ modules, users }: { modules: ModuleFull[]; users: Curr
 
   function reloadAccess() {
     if (moduleId) api.listModuleAccess(moduleId).then(setAccess)
+  }
+
+  async function handleTogglePublic() {
+    if (!selectedModule) return
+    setTogglingPublic(true)
+    try {
+      await api.setModulePublic(selectedModule.id, !selectedModule.public)
+      onModulesChange()
+    } finally {
+      setTogglingPublic(false)
+    }
+  }
+
+  async function handleToggleUnlisted() {
+    if (!selectedModule) return
+    setTogglingUnlisted(true)
+    try {
+      await api.setModuleUnlisted(selectedModule.id, !selectedModule.unlisted)
+      onModulesChange()
+    } finally {
+      setTogglingUnlisted(false)
+    }
   }
 
   return (
@@ -817,46 +887,92 @@ function PermissionsTab({ modules, users }: { modules: ModuleFull[]; users: Curr
         ))}
       </select>
 
-      {moduleId && (
+      {moduleId && selectedModule && (
         <>
-          <ul className="mb-4 divide-y" style={{ borderColor: 'var(--color-border)' }}>
-            {access.map((a) => (
-              <li key={a.user_id} className="flex items-center justify-between py-2 text-sm">
-                <span>{a.username}</span>
-                <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.revokeModuleAccess(moduleId, a.user_id).then(reloadAccess)}>
-                  revogar
-                </button>
-              </li>
-            ))}
-            {access.length === 0 && (
-              <li className="py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                Ninguém com acesso ainda.
-              </li>
-            )}
-          </ul>
+          <label
+            className="mb-4 flex items-center gap-2.5 rounded-lg p-3 text-sm"
+            style={{ background: 'var(--color-surface)' }}
+          >
+            <input
+              type="checkbox"
+              checked={selectedModule.public}
+              disabled={togglingPublic}
+              onChange={handleTogglePublic}
+            />
+            <span>
+              <span className="font-medium">Liberar para todos os usuários</span>
+              <span className="ml-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                — todo colaborador autenticado ganha acesso, sem precisar conceder um a um.
+              </span>
+            </span>
+          </label>
 
-          <div className="flex gap-2">
-            <select
-              className="rounded-lg px-3 py-2 text-sm outline-none"
-              style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
-              value={selectedUserId ?? ''}
-              onChange={(e) => setSelectedUserId(Number(e.target.value) || null)}
-            >
-              <option value="">Selecione um usuário…</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.username}
-                </option>
-              ))}
-            </select>
-            <button
-              className="rounded-lg px-4 py-2 text-[13px] font-semibold"
-              style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
-              onClick={() => selectedUserId && api.grantModuleAccess(moduleId, selectedUserId).then(reloadAccess)}
-            >
-              Conceder acesso
-            </button>
-          </div>
+          <label
+            className="mb-4 flex items-center gap-2.5 rounded-lg p-3 text-sm"
+            style={{ background: 'var(--color-surface)', opacity: selectedModule.public ? 0.5 : 1 }}
+          >
+            <input
+              type="checkbox"
+              checked={selectedModule.unlisted}
+              disabled={togglingUnlisted || selectedModule.public}
+              onChange={handleToggleUnlisted}
+            />
+            <span>
+              <span className="font-medium">Ocultar de quem não tem acesso</span>
+              <span className="ml-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                — some do catálogo de módulos e da barra lateral pra quem não pode usá-lo; quem tem permissão
+                continua vendo normalmente.{selectedModule.public && ' Sem efeito enquanto o módulo estiver liberado para todos.'}
+              </span>
+            </span>
+          </label>
+
+          {selectedModule.public ? (
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Este módulo está liberado para todos. Desmarque acima pra voltar a controlar o acesso pessoa a pessoa
+              — as concessões abaixo continuam guardadas.
+            </p>
+          ) : (
+            <>
+              <ul className="mb-4 divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                {access.map((a) => (
+                  <li key={a.user_id} className="flex items-center justify-between py-2 text-sm">
+                    <span>{a.username}</span>
+                    <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.revokeModuleAccess(moduleId, a.user_id).then(reloadAccess)}>
+                      revogar
+                    </button>
+                  </li>
+                ))}
+                {access.length === 0 && (
+                  <li className="py-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                    Ninguém com acesso ainda.
+                  </li>
+                )}
+              </ul>
+
+              <div className="flex gap-2">
+                <select
+                  className="rounded-lg px-3 py-2 text-sm outline-none"
+                  style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+                  value={selectedUserId ?? ''}
+                  onChange={(e) => setSelectedUserId(Number(e.target.value) || null)}
+                >
+                  <option value="">Selecione um usuário…</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="rounded-lg px-4 py-2 text-[13px] font-semibold"
+                  style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+                  onClick={() => selectedUserId && api.grantModuleAccess(moduleId, selectedUserId).then(reloadAccess)}
+                >
+                  Conceder acesso
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -938,11 +1054,15 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
                   className="ml-3 text-xs"
                   style={{ color: '#d43b3b' }}
                   onClick={() => {
-                    if (confirm(`Excluir o grupo "${g.name}"? Os avisos e eventos dele são apagados.`))
-                      api.deleteGroup(g.id).then(() => {
+                    if (!confirm(`Excluir o grupo "${g.name}"? Os avisos e eventos dele são apagados.`)) return
+                    setError(null)
+                    api
+                      .deleteGroup(g.id)
+                      .then(() => {
                         setSelected(null)
                         reload()
                       })
+                      .catch((err) => setError(err instanceof ApiError ? err.message : 'Falha ao excluir grupo.'))
                   }}
                 >
                   excluir
@@ -1011,6 +1131,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
             ))}
           </select>
 
+          {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
           <button className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }} onClick={() => setSelected(null)}>
             Fechar
           </button>
@@ -1118,7 +1239,7 @@ export function AdminPage() {
           onTypesChange={reloadTypes}
         />
       )}
-      {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} />}
+      {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} onModulesChange={reloadModules} />}
     </div>
   )
 }

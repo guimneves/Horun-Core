@@ -17,7 +17,22 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.db.models import POSITIONS, QUALIFICATIONS, User
+from app.db.models import (
+    POSITIONS,
+    QUALIFICATIONS,
+    Event,
+    EquipmentLog,
+    Group,
+    GroupMembership,
+    ModuleContributor,
+    Notification,
+    Post,
+    PostReply,
+    Reservation,
+    Suggestion,
+    User,
+    UserModuleAccess,
+)
 
 router = APIRouter(tags=["auth"])
 
@@ -134,6 +149,11 @@ class UpdateUserRequest(BaseModel):
     _validate_qualification = field_validator("qualification")(
         lambda v: _validate_choice(v, QUALIFICATIONS, "Qualificação") if v is not None else v
     )
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class UpdateProfileRequest(BaseModel):
@@ -263,6 +283,24 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
         user.birth_year = payload.birth_year
     elif payload.birth_set is False:
         user.birth_day = user.birth_month = user.birth_year = None
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _out(user)
+
+
+@router.post("/auth/change-password", response_model=UserOut)
+def change_my_password(payload: ChangePasswordRequest, user: CurrentUser, session: SessionDep):
+    """Autoatendimento — a própria pessoa troca a senha quando quiser, não
+    só no primeiro acesso (aquele fluxo usa `setup_code`, ver
+    /auth/set-password). Pedido do usuário: cadastrar todo mundo com senha
+    provisória e deixar cada um trocar depois."""
+    if user.password_hash is None or not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Senha atual incorreta")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A nova senha precisa ter pelo menos 6 caracteres")
+
+    user.password_hash = hash_password(payload.new_password)
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -468,6 +506,63 @@ def delete_user(user_id: int, admin: SuperAdminUser, session: SessionDep):
         )
     if user.id == admin.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Você não pode excluir a própria conta")
+
+    # Histórico real (aviso, reserva, ficha de equipamento, evento) nunca
+    # some só porque a conta é excluída — em SQLite (dev) a ausência de
+    # FK enforcement deixa passar e orfaniza a linha (o post some da
+    # listagem sem erro nenhum); em Postgres (produção) a mesma exclusão
+    # quebra com um IntegrityError cru. Em vez disso, bloqueia com uma
+    # explicação: pra tirar o acesso de quem saiu do laboratório, gera um
+    # novo código de primeiro acesso (a senha antiga para de funcionar) —
+    # excluir é só pra conta que nunca teve uso de verdade.
+    has_history = (
+        session.exec(select(Post).where(Post.author_id == user_id)).first() is not None
+        or session.exec(select(PostReply).where(PostReply.author_id == user_id)).first() is not None
+        or session.exec(select(Reservation).where(Reservation.user_id == user_id)).first() is not None
+        or session.exec(select(EquipmentLog).where(EquipmentLog.user_id == user_id)).first() is not None
+        or session.exec(select(Event).where(Event.created_by_id == user_id)).first() is not None
+    )
+    if has_history:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esta conta tem histórico no Horun (aviso no mural, reserva, ficha de equipamento ou evento) — "
+            "excluir apagaria registros compartilhados. Para tirar o acesso de quem saiu, gere um novo "
+            "código de primeiro acesso em 'gerar novo acesso' (a senha antiga para de funcionar) em vez de excluir.",
+        )
+    if session.exec(select(Group).where(Group.internal_admin_id == user_id)).first() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Esta pessoa é administradora interna de um grupo — troque o administrador do grupo (aba Grupos) "
+            "antes de excluir a conta.",
+        )
+
+    # Sem consequência pra apagar/desvincular junto: permissão de módulo,
+    # crédito de colaboração, sugestão enviada, notificação, filiação a
+    # grupos, e a conferência (não o registro) de uma ficha de equipamento.
+    for row in session.exec(select(UserModuleAccess).where(UserModuleAccess.user_id == user_id)).all():
+        session.delete(row)
+    for row in session.exec(select(UserModuleAccess).where(UserModuleAccess.granted_by_id == user_id)).all():
+        row.granted_by_id = None
+        session.add(row)
+    for row in session.exec(select(ModuleContributor).where(ModuleContributor.user_id == user_id)).all():
+        session.delete(row)
+    for row in session.exec(select(Suggestion).where(Suggestion.author_id == user_id)).all():
+        session.delete(row)
+    for row in session.exec(select(Notification).where(Notification.user_id == user_id)).all():
+        session.delete(row)
+    for row in session.exec(select(Notification).where(Notification.actor_id == user_id)).all():
+        row.actor_id = None
+        session.add(row)
+    for row in session.exec(select(GroupMembership).where(GroupMembership.user_id == user_id)).all():
+        session.delete(row)
+    for row in session.exec(select(GroupMembership).where(GroupMembership.added_by_id == user_id)).all():
+        row.added_by_id = None
+        session.add(row)
+    for row in session.exec(select(EquipmentLog).where(EquipmentLog.verified_by_id == user_id)).all():
+        row.verified_by_id = None
+        row.verified_at = None
+        session.add(row)
+
     session.delete(user)
     session.commit()
     return {"ok": True}

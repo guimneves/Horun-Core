@@ -19,6 +19,7 @@ from app.api import (
     routes_proxy,
     routes_reservations,
     routes_search,
+    routes_suggestions,
 )
 from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.core.security import hash_password
@@ -57,6 +58,7 @@ app.include_router(routes_reservations.router)
 app.include_router(routes_events.router)
 app.include_router(routes_groups.router)
 app.include_router(routes_search.router)
+app.include_router(routes_suggestions.router)
 app.include_router(routes_admin.router)
 app.include_router(routes_proxy.router)
 

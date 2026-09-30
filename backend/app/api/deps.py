@@ -35,3 +35,16 @@ def require_super_admin(user: CurrentUser) -> User:
 
 
 SuperAdminUser = Annotated[User, Depends(require_super_admin)]
+
+
+def require_protected(user: CurrentUser) -> User:
+    """Dependência para rotas restritas ao administrador *original* — a
+    conta protegida de bootstrap (`User.is_protected`), não qualquer
+    administrador máximo promovido depois. Hoje só a caixa de sugestões
+    usa isto (pedido explícito do usuário)."""
+    if not user.is_protected:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação restrita ao administrador original")
+    return user
+
+
+ProtectedUser = Annotated[User, Depends(require_protected)]

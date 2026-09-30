@@ -82,8 +82,16 @@ class CreateReplyRequest(BaseModel):
     content: str
 
 
+class UpdateReplyRequest(BaseModel):
+    content: str
+
+
 class UpdatePostRequest(BaseModel):
-    pinned: bool
+    # Ambos opcionais: o mesmo PATCH atende fixar/desafixar (`pinned`) e
+    # editar o texto (`content`) — cada um com sua própria checagem de
+    # permissão (ver update_post), sem precisar de duas rotas.
+    pinned: bool | None = None
+    content: str | None = None
 
 
 class ReplyOut(BaseModel):
@@ -151,9 +159,17 @@ def _can_pin_post(session: Session, post: Post, user: User) -> bool:
 
 
 def _can_manage_post(session: Session, post: Post, user: User) -> bool:
-    """Remover: o autor, o super-admin, ou — num mural de grupo — o admin
-    interno do grupo."""
+    """Remover/editar: o autor, o super-admin, ou — num mural de grupo — o
+    admin interno do grupo."""
     return post.author_id == user.id or _can_pin_post(session, post, user)
+
+
+def _can_manage_reply(session: Session, post: Post | None, reply: PostReply, user: User) -> bool:
+    """Remover/editar resposta: o autor, o super-admin, ou — num mural de
+    grupo — o admin interno do grupo."""
+    return reply.author_id == user.id or user.is_super_admin or (
+        post is not None and _group_internal_admin_id(session, post.group_id) == user.id
+    )
 
 
 def _post_out(post: Post, author: User, session: SessionDep, viewer: User) -> PostOut:
@@ -277,14 +293,23 @@ def get_post_attachment(post_id: int, _user: CurrentUser, session: SessionDep):
 
 @router.patch("/posts/{post_id}", response_model=PostOut)
 def update_post(post_id: int, payload: UpdatePostRequest, user: CurrentUser, session: SessionDep):
-    """Fixar/desafixar — o administrador máximo, ou (num mural de grupo) o
-    admin interno do grupo."""
     post = session.get(Post, post_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Aviso não encontrado")
-    if not (user.is_super_admin or _group_internal_admin_id(session, post.group_id) == user.id):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para fixar este aviso")
-    post.pinned = payload.pinned
+
+    if payload.pinned is not None:
+        if not _can_pin_post(session, post, user):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para fixar este aviso")
+        post.pinned = payload.pinned
+
+    if payload.content is not None:
+        if not _can_manage_post(session, post, user):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para editar este aviso")
+        content = payload.content.strip()
+        if not content:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "O aviso não pode ficar vazio")
+        post.content = content
+
     session.add(post)
     session.commit()
     session.refresh(post)
@@ -326,16 +351,32 @@ def create_reply(post_id: int, payload: CreateReplyRequest, user: CurrentUser, s
     return _reply_out(reply, user, session, user)
 
 
+@router.patch("/posts/{post_id}/replies/{reply_id}", response_model=ReplyOut)
+def update_reply(post_id: int, reply_id: int, payload: UpdateReplyRequest, user: CurrentUser, session: SessionDep):
+    reply = session.get(PostReply, reply_id)
+    if reply is None or reply.post_id != post_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resposta não encontrada")
+    post = session.get(Post, post_id)
+    if not _can_manage_reply(session, post, reply, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para editar esta resposta")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "A resposta não pode ficar vazia")
+    reply.content = content
+    session.add(reply)
+    session.commit()
+    session.refresh(reply)
+    author = session.get(User, reply.author_id)
+    return _reply_out(reply, author, session, user)
+
+
 @router.delete("/posts/{post_id}/replies/{reply_id}")
 def delete_reply(post_id: int, reply_id: int, user: CurrentUser, session: SessionDep):
     reply = session.get(PostReply, reply_id)
     if reply is None or reply.post_id != post_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resposta não encontrada")
     post = session.get(Post, post_id)
-    can = reply.author_id == user.id or user.is_super_admin or (
-        post is not None and _group_internal_admin_id(session, post.group_id) == user.id
-    )
-    if not can:
+    if not _can_manage_reply(session, post, reply, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para remover esta resposta")
     session.delete(reply)
     session.commit()

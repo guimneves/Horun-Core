@@ -16,6 +16,7 @@ import { SobrePage } from './pages/SobrePage'
 import { Avatar } from './components/Avatar'
 import { NotificationsBell } from './components/NotificationsBell'
 import { OnboardingModal } from './components/OnboardingModal'
+import { SuggestionBox } from './components/SuggestionBox'
 import { GlobalSearch } from './components/GlobalSearch'
 import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon, EquipmentIcon, InfoIcon } from './icons'
 import { readHiddenModules, onHiddenModulesChange } from './sidebarModules'
@@ -172,6 +173,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       </div>
 
       <OnboardingModal />
+      <SuggestionBox />
     </div>
   )
 }

@@ -38,6 +38,8 @@ class ModuleOut(BaseModel):
     internal_base_url: str
     health_path: str
     internal_frontend_url: str
+    public: bool
+    unlisted: bool
 
 
 class ModuleStatusOut(BaseModel):
@@ -64,6 +66,8 @@ def _out(m: Module) -> ModuleOut:
         internal_base_url=m.internal_base_url or "",
         health_path=m.health_path or "/health",
         internal_frontend_url=m.internal_frontend_url or "",
+        public=bool(m.public),
+        unlisted=bool(m.unlisted),
     )
 
 
@@ -126,7 +130,10 @@ async def _check_module_online(module: Module) -> bool:
 @router.get("/dashboard/modules", response_model=list[ModuleStatusOut])
 async def dashboard_modules(user: CurrentUser, session: SessionDep):
     """Todo usuário autenticado vê todo módulo cadastrado e seu status —
-    a permissão só decide `has_access` (Prompt_Horun_Core.md, seção 5)."""
+    a permissão só decide `has_access` (Prompt_Horun_Core.md, seção 5).
+    Exceção: um módulo `unlisted` some da lista pra quem não tem acesso —
+    pedido do usuário pra tirar um módulo da visualização geral, mantendo
+    quem já tem permissão vendo normalmente."""
     modules = session.exec(select(Module)).all()
 
     access_ids: set[str] = set()
@@ -138,6 +145,9 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
 
     out: list[ModuleStatusOut] = []
     for m in modules:
+        has_access = user.is_super_admin or bool(m.public) or m.id in access_ids
+        if m.unlisted and not has_access:
+            continue
         online = await _check_module_online(m)
         out.append(
             ModuleStatusOut(
@@ -146,7 +156,7 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
                 description=m.description or "",
                 icon=m.icon or "🧪",
                 status="online" if online else "offline",
-                has_access=user.is_super_admin or m.id in access_ids,
+                has_access=has_access,
                 embeddable=bool(m.internal_frontend_url),
             )
         )
@@ -160,6 +170,47 @@ class AccessGrantRequest(BaseModel):
 class AccessOut(BaseModel):
     user_id: int
     username: str
+
+
+class ModulePublicIn(BaseModel):
+    public: bool
+
+
+@router.patch("/modules/{module_id}/public", response_model=ModuleOut)
+def set_module_public(module_id: str, payload: ModulePublicIn, _admin: SuperAdminUser, session: SessionDep):
+    """Liga/desliga o acesso pra todo mundo de uma vez — pedido do
+    usuário: alguns módulos não precisam de concessão usuário a usuário,
+    todo colaborador do laboratório deve ter acesso. As concessões
+    individuais (`UserModuleAccess`) continuam guardadas por baixo, então
+    desligar volta a valer o que já tinha sido concedido antes."""
+    module = session.get(Module, module_id)
+    if module is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
+    module.public = payload.public
+    session.add(module)
+    session.commit()
+    session.refresh(module)
+    return _out(module)
+
+
+class ModuleUnlistedIn(BaseModel):
+    unlisted: bool
+
+
+@router.patch("/modules/{module_id}/unlisted", response_model=ModuleOut)
+def set_module_unlisted(module_id: str, payload: ModuleUnlistedIn, _admin: SuperAdminUser, session: SessionDep):
+    """Liga/desliga a listagem geral (catálogo de módulos, barra lateral)
+    pra quem não tem acesso — pedido do usuário: tirar um módulo da
+    visualização de todos, mantendo visível pra quem já pode usá-lo. Não
+    mexe na permissão em si, só em aparecer ou não na lista."""
+    module = session.get(Module, module_id)
+    if module is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
+    module.unlisted = payload.unlisted
+    session.add(module)
+    session.commit()
+    session.refresh(module)
+    return _out(module)
 
 
 @router.get("/modules/{module_id}/access", response_model=list[AccessOut])

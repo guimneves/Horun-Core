@@ -86,6 +86,8 @@ def _run_migrations() -> None:
     _ensure_column("module", "health_path", "VARCHAR DEFAULT '/health'")
     _ensure_column("module", "internal_frontend_url", "VARCHAR DEFAULT ''")
     _backfill_null_text("module", ("description", "internal_frontend_url", "display_name"))
+    _ensure_column("module", "public", "BOOLEAN DEFAULT FALSE")
+    _ensure_column("module", "unlisted", "BOOLEAN DEFAULT FALSE")
 
     # --- post: anexos + escopo de grupo (Fase 2) ---
     _ensure_column("post", "attachment", blob)

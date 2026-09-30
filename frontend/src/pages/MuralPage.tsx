@@ -174,6 +174,27 @@ function PostAttachment({ post }: { post: Post }) {
 
 function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]; postId: number; onChanged: () => void }) {
   const canDelete = reply.can_delete
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(reply.content)
+  const [busy, setBusy] = useState(false)
+
+  function startEdit() {
+    setDraft(reply.content)
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    if (!draft.trim()) return
+    setBusy(true)
+    try {
+      await api.editReply(postId, reply.id, draft.trim())
+      setEditing(false)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex gap-2.5">
       <Avatar name={reply.author_display_name} size={26} userId={reply.author_id} />
@@ -183,9 +204,14 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
           <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
             · {timeAgo(reply.created_at)}
           </span>
-          {canDelete && (
+          {canDelete && !editing && (
+            <button className="ml-auto text-[11px]" style={{ color: 'var(--color-text-muted)' }} onClick={startEdit}>
+              editar
+            </button>
+          )}
+          {canDelete && !editing && (
             <button
-              className="ml-auto text-[11px]"
+              className="text-[11px]"
               style={{ color: '#d43b3b' }}
               onClick={() => api.deleteReply(postId, reply.id).then(onChanged)}
             >
@@ -193,7 +219,33 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
             </button>
           )}
         </div>
-        <p className="text-[13px] leading-relaxed">{renderWithMentions(reply.content)}</p>
+        {editing ? (
+          <div className="mt-1">
+            <MentionTextarea
+              value={draft}
+              onChange={setDraft}
+              rows={1}
+              autoFocus
+              className="w-full resize-none rounded-lg px-2.5 py-1.5 text-[13px] outline-none"
+              style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+            />
+            <div className="mt-1 flex justify-end gap-2">
+              <button className="text-[11.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
+                cancelar
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={busy || !draft.trim()}
+                className="rounded-md px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-[13px] leading-relaxed">{renderWithMentions(reply.content)}</p>
+        )}
       </div>
     </div>
   )
@@ -268,6 +320,26 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
   // O backend decide (autor, super-admin, ou admin interno do grupo).
   const canManage = post.can_pin
   const canDelete = post.can_delete
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(post.content)
+  const [busy, setBusy] = useState(false)
+
+  function startEdit() {
+    setDraft(post.content)
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    if (!draft.trim()) return
+    setBusy(true)
+    try {
+      await api.editPost(post.id, draft.trim())
+      setEditing(false)
+      onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div
@@ -309,7 +381,16 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
                 desafixar
               </button>
             )}
-            {canDelete && (
+            {canDelete && !editing && (
+              <button
+                className={post.pinned || canManage ? 'text-[11.5px]' : 'ml-auto text-[11.5px]'}
+                style={{ color: 'var(--color-text-muted)' }}
+                onClick={startEdit}
+              >
+                editar
+              </button>
+            )}
+            {canDelete && !editing && (
               <button
                 className="text-[11.5px]"
                 style={{ color: '#d43b3b' }}
@@ -319,7 +400,33 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
               </button>
             )}
           </div>
-          <p className="mt-1.5 text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
+          {editing ? (
+            <div className="mt-1.5">
+              <MentionTextarea
+                value={draft}
+                onChange={setDraft}
+                rows={2}
+                autoFocus
+                className="w-full resize-none rounded-[10px] px-3.5 py-2.5 text-sm outline-none"
+                style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
+              />
+              <div className="mt-1.5 flex justify-end gap-2">
+                <button className="text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
+                  cancelar
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={busy || !draft.trim()}
+                  className="rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
+                  style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
+          )}
           <PostAttachment post={post} />
         </div>
       </div>

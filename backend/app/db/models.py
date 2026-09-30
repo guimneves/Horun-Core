@@ -104,6 +104,19 @@ class Module(SQLModel, table=True):
     # "http://amostras-frontend:80" — vazio se o módulo ainda não suporta
     # o encaixe de interface dentro do Core (Prompt_Horun_Core.md, seção 8).
     internal_frontend_url: str = ""
+    # Liberado pra todo usuário autenticado, sem precisar de concessão
+    # individual (`UserModuleAccess`) — só o administrador máximo alterna
+    # isto (rotas_modules.py); as concessões individuais continuam
+    # existindo por baixo, então desligar volta a valer o que já foi
+    # concedido antes.
+    public: bool = Field(default=False)
+    # Some do catálogo (`GET /dashboard/modules` — página Módulos, barra
+    # lateral) pra quem não tem acesso; quem tem (concessão individual,
+    # `public`, ou administrador máximo) continua vendo normalmente. Só o
+    # administrador máximo alterna isto (routes_modules.py). Não afeta a
+    # aplicação da permissão em si (`/m/{id}/...` já bloqueia de qualquer
+    # jeito) — é só sobre aparecer ou não na listagem.
+    unlisted: bool = Field(default=False)
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -178,6 +191,19 @@ class PostReply(SQLModel, table=True):
     post_id: int = Field(foreign_key="post.id", index=True)
     author_id: int = Field(foreign_key="user.id", index=True)
     content: str
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Suggestion(SQLModel, table=True):
+    """Caixa de sugestões — qualquer colaborador deixa uma sugestão pelo
+    ícone flutuante (canto da tela); só o administrador *original*
+    (`User.is_protected`, não qualquer administrador máximo — ver seção 6
+    do Prompt_Horun_Core.md) enxerga e gerencia a lista."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    author_id: int = Field(foreign_key="user.id", index=True)
+    text: str
+    status: str = Field(default="novo")  # "novo" | "lida" | "arquivada"
     created_at: datetime = Field(default_factory=utcnow)
 
 
