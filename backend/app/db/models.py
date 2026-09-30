@@ -273,6 +273,9 @@ class EquipmentType(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+EQUIPMENT_VOLTAGES = ["110V", "220V (monofásico)", "220V (bifásico)", "380V"]
+
+
 class Equipment(SQLModel, table=True):
     """Equipamento reservável na Agenda — conceito separado de `Module`:
     nem todo equipamento tem módulo de software (ex. balança analítica), e
@@ -294,6 +297,10 @@ class Equipment(SQLModel, table=True):
     model_name: str = ""
     serial_number: str = ""
     asset_tag: str = ""  # "Patrimônio"
+    # Um dos valores de EQUIPMENT_VOLTAGES acima, ou "" (não informado) —
+    # mesmo raciocínio das listas fechadas de POSITIONS/QUALIFICATIONS:
+    # texto simples, validado na API, não Enum de banco.
+    voltage: str = ""
     # Foto servida separada (GET /equipment/{id}/photo), mesmo padrão da
     # foto de perfil do usuário — não pesa a listagem carregando bytes à
     # toa (ver User.photo em routes_auth.py).

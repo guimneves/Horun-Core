@@ -15,7 +15,17 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
-from app.db.models import USAGE_PURPOSES, Equipment, EquipmentArea, EquipmentLog, EquipmentType, Module, Reservation, User
+from app.db.models import (
+    EQUIPMENT_VOLTAGES,
+    USAGE_PURPOSES,
+    Equipment,
+    EquipmentArea,
+    EquipmentLog,
+    EquipmentType,
+    Module,
+    Reservation,
+    User,
+)
 
 router = APIRouter(tags=["equipment"])
 
@@ -155,6 +165,7 @@ class EquipmentIn(BaseModel):
     model_name: str = ""
     serial_number: str = ""
     asset_tag: str = ""
+    voltage: str = ""
 
 
 class EquipmentPatch(BaseModel):
@@ -173,6 +184,7 @@ class EquipmentPatch(BaseModel):
     model_name: str | None = None
     serial_number: str | None = None
     asset_tag: str | None = None
+    voltage: str | None = None
 
 
 class EquipmentOut(BaseModel):
@@ -189,6 +201,7 @@ class EquipmentOut(BaseModel):
     model_name: str
     serial_number: str
     asset_tag: str
+    voltage: str
     has_photo: bool
     # Resumo pra card da grade — computados, não persistidos.
     reservations_this_week: int = 0
@@ -233,6 +246,7 @@ def _out(e: Equipment, last_used: datetime | None = None, reservations_week: int
         model_name=e.model_name or "",
         serial_number=e.serial_number or "",
         asset_tag=e.asset_tag or "",
+        voltage=e.voltage or "",
         has_photo=e.photo is not None,
         reservations_this_week=reservations_week,
         last_used_at=last_used,
@@ -254,6 +268,13 @@ def _check_module(session: Session, module_id: str | None) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Módulo não encontrado")
 
 
+def _check_voltage(voltage: str) -> None:
+    if voltage and voltage not in EQUIPMENT_VOLTAGES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"Voltagem inválida — use uma de: {', '.join(EQUIPMENT_VOLTAGES)}"
+        )
+
+
 @router.get("/equipment", response_model=list[EquipmentOut])
 def list_equipment(_user: CurrentUser, session: SessionDep):
     items = session.exec(select(Equipment)).all()
@@ -270,6 +291,7 @@ def create_equipment(payload: EquipmentIn, _admin: SuperAdminUser, session: Sess
     _check_area(session, payload.area_id)
     _check_type(session, payload.type_id)
     _check_module(session, payload.module_id)
+    _check_voltage(payload.voltage)
     equipment = Equipment(**payload.model_dump())
     session.add(equipment)
     session.commit()
@@ -316,6 +338,9 @@ def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: SuperAd
         equipment.serial_number = payload.serial_number
     if payload.asset_tag is not None:
         equipment.asset_tag = payload.asset_tag
+    if payload.voltage is not None:
+        _check_voltage(payload.voltage)
+        equipment.voltage = payload.voltage
 
     session.add(equipment)
     session.commit()
@@ -328,6 +353,25 @@ def delete_equipment(equipment_id: str, _admin: SuperAdminUser, session: Session
     equipment = session.get(Equipment, equipment_id)
     if equipment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+
+    # Mesmo problema já visto em usuário/grupo (ver routes_auth.py): excluir
+    # um equipamento com histórico real (reserva, ficha de utilização/RUE)
+    # quebra com erro de integridade em Postgres (produção) — SQLite (dev)
+    # não reforça a constraint e deixa passar, orfanizando a linha e
+    # escondendo o bug. Bloqueia com uma explicação em vez de deixar
+    # quebrar feio ou perder o histórico de uso do equipamento.
+    has_history = (
+        session.exec(select(Reservation).where(Reservation.equipment_id == equipment_id)).first() is not None
+        or session.exec(select(EquipmentLog).where(EquipmentLog.equipment_id == equipment_id)).first() is not None
+    )
+    if has_history:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Este equipamento tem histórico (reservas na agenda ou registros na ficha de utilização) — "
+            "excluir apagaria esse histórico. Remova as reservas e os registros da ficha primeiro, se for "
+            "mesmo necessário excluir o equipamento.",
+        )
+
     session.delete(equipment)
     session.commit()
     return {"ok": True}

@@ -116,6 +116,8 @@ def _run_migrations() -> None:
     _ensure_column("equipment", "asset_tag", "VARCHAR DEFAULT ''")
     _backfill_null_text("equipment", ("manufacturer", "model_name", "serial_number", "asset_tag"))
     _ensure_column("equipment", "type_id", "INTEGER")
+    _ensure_column("equipment", "voltage", "VARCHAR DEFAULT ''")
+    _backfill_null_text("equipment", ("voltage",))
 
     # --- equipmentlog: ficha de utilização (RUE) — campos da ficha de
     # papel do laboratório, além dos que já existiam (Fase B) ---

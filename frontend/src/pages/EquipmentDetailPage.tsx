@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api, ApiError, type Equipment, type EquipmentArea, type EquipmentType, type ModuleFull, type ModuleStatus } from '../api/client'
+import { EQUIPMENT_VOLTAGES, api, ApiError, type Equipment, type EquipmentArea, type EquipmentType, type ModuleFull, type ModuleStatus } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { EquipmentPhoto } from '../components/EquipmentPhoto'
 import { EquipmentQrCode } from '../components/EquipmentQrCode'
@@ -69,6 +69,7 @@ export function EquipmentDetailPage() {
   const [modelName, setModelName] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
   const [assetTag, setAssetTag] = useState('')
+  const [voltage, setVoltage] = useState('')
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<DetailTab>('Ficha de utilização')
@@ -103,6 +104,7 @@ export function EquipmentDetailPage() {
     setModelName(eq.model_name)
     setSerialNumber(eq.serial_number)
     setAssetTag(eq.asset_tag)
+    setVoltage(eq.voltage)
     setError(null)
   }, [eq?.id])
 
@@ -473,6 +475,28 @@ export function EquipmentDetailPage() {
               )}
             </div>
           </div>
+
+          <label className={`mt-3 ${labelCls}`} style={labelStyle}>Voltagem</label>
+          {isAdmin ? (
+            <select
+              value={voltage}
+              onChange={(e) => {
+                setVoltage(e.target.value)
+                save({ voltage: e.target.value })
+              }}
+              className={field}
+              style={fieldStyle}
+            >
+              <option value="">—</option>
+              {EQUIPMENT_VOLTAGES.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm" style={{ color: eq.voltage ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
+              {eq.voltage || '—'}
+            </p>
+          )}
         </Card>
 
         <Card>

@@ -75,6 +75,9 @@ export const QUALIFICATIONS = [
   'Técnico(a)',
 ]
 
+// Mesma lista de app/db/models.py (EQUIPMENT_VOLTAGES).
+export const EQUIPMENT_VOLTAGES = ['110V', '220V (monofásico)', '220V (bifásico)', '380V']
+
 export interface ModuleStatus {
   id: string
   display_name: string
@@ -192,6 +195,7 @@ export interface Equipment {
   model_name: string
   serial_number: string
   asset_tag: string
+  voltage: string
   has_photo: boolean
   reservations_this_week: number
   last_used_at: string | null
@@ -452,6 +456,7 @@ export const api = {
     model_name?: string
     serial_number?: string
     asset_tag?: string
+    voltage?: string
   }) => request<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(payload) }),
   updateEquipment: (
     equipmentId: string,
@@ -471,6 +476,7 @@ export const api = {
       model_name: string
       serial_number: string
       asset_tag: string
+      voltage: string
     }>,
   ) => request<Equipment>(`/equipment/${equipmentId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteEquipment: (equipmentId: string) =>

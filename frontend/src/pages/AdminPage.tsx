@@ -727,7 +727,18 @@ function EquipmentTab({
                 <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
                 <Td>{types.find((t) => t.id === eq.type_id)?.name ?? '—'}</Td>
                 <Td right>
-                  <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteEquipment(eq.id).then(onChange)}>
+                  <button
+                    className="text-xs"
+                    style={{ color: '#d43b3b' }}
+                    onClick={() => {
+                      if (!confirm(`Excluir o equipamento "${eq.display_name}"? Essa ação não pode ser desfeita.`)) return
+                      setError(null)
+                      api
+                        .deleteEquipment(eq.id)
+                        .then(onChange)
+                        .catch((err) => setError(err instanceof ApiError ? err.message : 'Falha ao excluir equipamento.'))
+                    }}
+                  >
                     remover
                   </button>
                 </Td>
