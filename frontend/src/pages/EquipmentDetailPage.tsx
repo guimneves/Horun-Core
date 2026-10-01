@@ -151,9 +151,14 @@ export function EquipmentDetailPage() {
   }
 
   async function handleDelete() {
-    if (!eq || !confirm(`Remover "${eq.display_name}"? Isto não apaga o histórico de reservas.`)) return
-    await api.deleteEquipment(eq.id)
-    navigate('/equipamentos')
+    if (!eq || !confirm(`Excluir o equipamento "${eq.display_name}"? Essa ação não pode ser desfeita.`)) return
+    setError(null)
+    try {
+      await api.deleteEquipment(eq.id)
+      navigate('/equipamentos')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao excluir equipamento.')
+    }
   }
 
   if (loaded && !eq) {
