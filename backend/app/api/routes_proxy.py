@@ -3,7 +3,7 @@ identidade do usuário já autenticado no Core via cabeçalhos internos
 confiáveis (Prompt_Horun_Core.md, seção 1 e 3 — mesmo contrato que
 module-template/backend/app/core/identity.py espera).
 
-Encaixe de interface (Prompt_Horun_Core.md, seção 8, item 1): `/m/{id}/*`
+Encaixe de interface (Prompt_Horun_Core.md, seção 8.1): `/m/{id}/*`
 atende dois tipos de requisição, distinguidos pelo primeiro segmento do
 caminho —
   - `api/...` → API do módulo, vai para `module.internal_base_url`;

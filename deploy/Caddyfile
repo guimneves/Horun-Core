@@ -1,6 +1,6 @@
 # Mesmo padrão do RE7S (Rock Eval Horun Dev/deploy/Caddyfile) — TLS
 # self-signed automático via "tls internal" (decisão registrada em
-# Prompt_Fase2.md, seção 4). Este é o ÚNICO ponto de entrada público da
+# Prompt_Horun_Core.md, seção 9.3). Este é o ÚNICO ponto de entrada público da
 # plataforma: nem o backend do Core, nem o de nenhum módulo, expõem porta
 # ao host — só este proxy.
 :443 {

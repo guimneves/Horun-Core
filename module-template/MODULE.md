@@ -1,6 +1,6 @@
 # __MODULE_NAME__
 
-Manifesto lido pelo Horun Core para cadastrar este módulo no dashboard (ver `Prompt_Horun_Core.md`, seções 3 e 5).
+Manifesto do módulo — referência para o administrador cadastrá-lo no Horun Core (ver `Prompt_Horun_Core.md`, seções 3 e 5).
 
 - **id**: `__MODULE_ID__`
 - **nome público**: Horun · __MODULE_NAME__

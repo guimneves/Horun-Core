@@ -12,13 +12,13 @@ MODULE.md   Manifesto lido pelo Horun Core (nome, ícone, porta, health check)
 
 ## Desenvolvendo de forma independente (sem o Horun Core rodando)
 
-```
+```powershell
 # backend
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
-set HORUN_DEV_MODE=true
+$env:HORUN_DEV_MODE = "true"
 uvicorn app.main:app --reload
 
 # frontend (outro terminal)
@@ -33,4 +33,4 @@ Com `HORUN_DEV_MODE=true`, o backend usa um usuário fixo (admin de desenvolvime
 
 1. Remover `HORUN_DEV_MODE` do ambiente de produção — o backend passa a exigir identidade vinda do Core.
 2. Adicionar o serviço deste módulo ao `docker-compose.yml` do servidor (backend sem porta exposta ao host — só alcançável pelo Core, mesma regra do RE7S).
-3. Core lê `MODULE.md` e cadastra o módulo no dashboard automaticamente.
+3. O administrador cadastra o módulo no painel de Administração do Core, a partir dos dados do `MODULE.md` (o cadastro é manual — o Core não lê o arquivo sozinho).

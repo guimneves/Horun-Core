@@ -175,11 +175,34 @@ RUN npm run build -- --base=$VITE_BASE
 
 O `docker-compose.yml` do módulo passa `VITE_BASE=/m/<id>/` nesse build arg, e o serviço do frontend entra na `horun-network` com um `container_name` previsível (ex. `amostras-frontend`) — é esse nome que o administrador do Core cadastra como `internal_frontend_url` do módulo. Sem esses três ajustes, o módulo continua funcionando perfeitamente sozinho (`VITE_BASE` default `/`) — só não pode ser aberto de dentro do Core ainda.
 
-## 7. O que entregar ao final
+## 7. Banco de dados — migração defensiva (obrigatório)
+
+`SQLModel.metadata.create_all(engine)` **só cria tabela que não existe — nunca adiciona coluna a uma tabela que já existe**. Se um campo novo entra num modelo depois que o banco de produção já foi criado, toda consulta àquela tabela quebra com `UndefinedColumn` e o backend entra em loop de reinício. Já derrubou os módulos Amostras e Reagentes em produção mais de uma vez. Use este padrão desde o primeiro commit (`app/core/db.py`):
+
+```python
+from sqlalchemy import inspect
+
+def _ensure_column(table: str, column: str, ddl_type: str) -> None:
+    existing = {c["name"] for c in inspect(engine).get_columns(table)}
+    if column in existing:
+        return
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
+
+def create_db_and_tables() -> None:
+    SQLModel.metadata.create_all(engine)
+    # uma linha por coluna adicionada a um modelo depois do primeiro deploy —
+    # cresce com o tempo, mas nunca quebra. Ex.:
+    # _ensure_column("sample", "observacoes", "VARCHAR")
+```
+
+**Regra**: toda vez que somar um campo num modelo que já tem tabela em produção, some a linha de `_ensure_column` **no mesmo commit**. A migração roda no startup — só vale depois que o backend reinicia de verdade.
+
+## 8. O que entregar ao final
 
 1. Código completo do backend e frontend seguindo a estrutura acima.
 2. `README.md` explicando como rodar em modo standalone (`HORUN_DEV_MODE=true` + `uvicorn` + `npm run dev`), igual ao padrão dos módulos já existentes do Horun.
 3. Testes automatizados do backend cobrindo a lógica de negócio principal (pytest).
 4. Nenhuma senha, chave ou segredo real commitado — variáveis de ambiente com um `.env.example` de modelo.
 
-Depois de pronto, o mantenedor do Horun (usando Claude Code, com acesso ao restante do projeto) cuida da parte de "plugar" — cadastrar o `MODULE.md` no Core, configurar o `docker-compose.yml` do servidor, e validar permissões. Você não precisa se preocupar com essa parte.
+Depois de pronto, o mantenedor do Horun (usando Claude Code, com acesso ao restante do projeto) cuida da parte de "plugar" — cadastrar o módulo no painel de Administração do Core (a partir dos dados do `MODULE.md`, com a URL interna do backend e do frontend, ex. `http://<id>-backend:8000` e `http://<id>-frontend:80`), configurar o `docker-compose.yml` do servidor, e validar permissões. Você não precisa se preocupar com essa parte.
