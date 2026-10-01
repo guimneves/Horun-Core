@@ -25,7 +25,7 @@ export function EquipmentPhoto({
   if (showPhoto) {
     return (
       <img
-        src={`${API_BASE}/equipment/${equipmentId}/photo${cacheBust !== undefined ? `?v=${cacheBust}` : ''}`}
+        src={`${API_BASE}/equipment/${encodeURIComponent(equipmentId)}/photo${cacheBust !== undefined ? `?v=${cacheBust}` : ''}`}
         alt=""
         crossOrigin="use-credentials"
         onError={() => setFailed(true)}

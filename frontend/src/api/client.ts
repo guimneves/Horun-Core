@@ -478,13 +478,15 @@ export const api = {
       asset_tag: string
       voltage: string
     }>,
-  ) => request<Equipment>(`/equipment/${equipmentId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  ) => request<Equipment>(`/equipment/${encodeURIComponent(equipmentId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  renameEquipmentId: (equipmentId: string, newId: string) =>
+    request<Equipment>(`/equipment/${encodeURIComponent(equipmentId)}/id`, { method: 'PATCH', body: JSON.stringify({ id: newId }) }),
   deleteEquipment: (equipmentId: string) =>
-    request<{ ok: boolean }>(`/equipment/${equipmentId}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/equipment/${encodeURIComponent(equipmentId)}`, { method: 'DELETE' }),
   uploadEquipmentPhoto: async (equipmentId: string, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(`${API_BASE}/equipment/${equipmentId}/photo`, { method: 'POST', credentials: 'include', body: form })
+    const res = await fetch(`${API_BASE}/equipment/${encodeURIComponent(equipmentId)}/photo`, { method: 'POST', credentials: 'include', body: form })
     if (!res.ok) {
       let message = res.statusText
       try {
@@ -497,7 +499,7 @@ export const api = {
     return res.json() as Promise<Equipment>
   },
   deleteEquipmentPhoto: (equipmentId: string) =>
-    request<Equipment>(`/equipment/${equipmentId}/photo`, { method: 'DELETE' }),
+    request<Equipment>(`/equipment/${encodeURIComponent(equipmentId)}/photo`, { method: 'DELETE' }),
 
   listEquipmentAreas: () => request<EquipmentArea[]>('/equipment-areas'),
   createEquipmentArea: (name: string) =>
@@ -515,11 +517,11 @@ export const api = {
   deleteEquipmentType: (typeId: number) =>
     request<{ ok: boolean }>(`/equipment-types/${typeId}`, { method: 'DELETE' }),
 
-  listEquipmentLogs: (equipmentId: string) => request<EquipmentLog[]>(`/equipment/${equipmentId}/logs`),
+  listEquipmentLogs: (equipmentId: string) => request<EquipmentLog[]>(`/equipment/${encodeURIComponent(equipmentId)}/logs`),
   createEquipmentLog: (
     equipmentId: string,
     payload: { purpose: string; experiment_code?: string; description?: string; occurred_at?: string; ended_at?: string | null },
-  ) => request<EquipmentLog>(`/equipment/${equipmentId}/logs`, { method: 'POST', body: JSON.stringify(payload) }),
+  ) => request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs`, { method: 'POST', body: JSON.stringify(payload) }),
   updateEquipmentLog: (
     equipmentId: string,
     logId: number,
@@ -531,11 +533,11 @@ export const api = {
       ended_at: string | null
       clear_ended_at: boolean
     }>,
-  ) => request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  ) => request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   verifyEquipmentLog: (equipmentId: string, logId: number) =>
-    request<EquipmentLog>(`/equipment/${equipmentId}/logs/${logId}/verify`, { method: 'POST' }),
+    request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}/verify`, { method: 'POST' }),
   deleteEquipmentLog: (equipmentId: string, logId: number) =>
-    request<{ ok: boolean }>(`/equipment/${equipmentId}/logs/${logId}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}`, { method: 'DELETE' }),
 
   listReservations: (range?: { start: string; end: string }) =>
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),

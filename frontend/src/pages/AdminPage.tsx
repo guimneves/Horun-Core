@@ -19,9 +19,11 @@ import { Avatar } from '../components/Avatar'
 const TABS = ['Usuários', 'Grupos', 'Módulos', 'Equipamentos', 'Permissões'] as const
 type Tab = (typeof TABS)[number]
 
-// Nome de usuário tem que ser um slug (sem espaço, sem acento) — senão a
-// menção `@usuario` quebra no espaço e a pessoa não é notificada.
-function slugifyUsername(raw: string): string {
+// Nome de usuário e id de equipamento têm que ser um slug (sem espaço,
+// sem acento) — senão a menção `@usuario` quebra no espaço (e a pessoa
+// não é notificada), ou a URL/API do equipamento quebra (ver
+// _validate_equipment_id em routes_equipment.py).
+function slugify(raw: string): string {
   return raw
     .toLowerCase()
     .normalize('NFD')
@@ -233,7 +235,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
       u.username,
     )
     if (!raw) return
-    const next = slugifyUsername(raw)
+    const next = slugify(raw)
     if (!next || next === u.username) return
     setError(null)
     try {
@@ -401,7 +403,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
           label="Usuário"
           placeholder="usuario.sobrenome"
           value={username}
-          onChange={(e) => setUsername(slugifyUsername(e.target.value))}
+          onChange={(e) => setUsername(slugify(e.target.value))}
         />
         <p className="-mt-2 mb-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
           Sem espaço e sem acento — é o que a pessoa digita pra entrar e o que vai depois do @ nas menções.
@@ -705,6 +707,23 @@ function EquipmentTab({
     await rename(item.id, next)
   }
 
+  async function handleRenameEquipmentId(eq: Equipment) {
+    const raw = window.prompt(
+      `Novo id para "${eq.display_name}" (sem espaço, sem acento — é o que aparece na URL):`,
+      eq.id,
+    )
+    if (!raw) return
+    const next = slugify(raw)
+    if (!next || next === eq.id) return
+    setError(null)
+    try {
+      await api.renameEquipmentId(eq.id, next)
+      onChange()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao renomear id do equipamento.')
+    }
+  }
+
   return (
     <div className="flex gap-5">
       <div className="flex-1">
@@ -717,6 +736,7 @@ function EquipmentTab({
           <thead>
             <tr>
               <Th>Equipamento</Th>
+              <Th>Id</Th>
               <Th>Área</Th>
               <Th>Tipo</Th>
               <Th right>Ações</Th>
@@ -731,11 +751,17 @@ function EquipmentTab({
                     <span className="font-medium">{eq.display_name}</span>
                   </div>
                 </Td>
+                <Td>
+                  <code className="text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>{eq.id}</code>
+                </Td>
                 <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
                 <Td>{types.find((t) => t.id === eq.type_id)?.name ?? '—'}</Td>
                 <Td right>
+                  <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRenameEquipmentId(eq)}>
+                    renomear id
+                  </button>
                   <button
-                    className="text-xs"
+                    className="ml-3 text-xs"
                     style={{ color: '#d43b3b' }}
                     onClick={() => {
                       if (!confirm(`Excluir o equipamento "${eq.display_name}"? Essa ação não pode ser desfeita.`)) return
@@ -784,7 +810,7 @@ function EquipmentTab({
       </div>
 
       <CreatePanel title="Cadastrar equipamento">
-        <FieldInput label="Id (slug)" placeholder="ex.: leco832" value={id} onChange={(e) => setId(e.target.value)} />
+        <FieldInput label="Id (slug)" placeholder="ex.: leco832" value={id} onChange={(e) => setId(slugify(e.target.value))} />
         <FieldInput label="Nome" placeholder="ex.: LECO 832" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         <div className="mb-3.5">
           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>

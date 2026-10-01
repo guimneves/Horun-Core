@@ -12,7 +12,7 @@ function CardPhoto({ equipmentId, color, hasPhoto }: { equipmentId: string; colo
   if (hasPhoto && !failed) {
     return (
       <img
-        src={`${API_BASE}/equipment/${equipmentId}/photo`}
+        src={`${API_BASE}/equipment/${encodeURIComponent(equipmentId)}/photo`}
         alt=""
         crossOrigin="use-credentials"
         onError={() => setFailed(true)}
@@ -154,7 +154,7 @@ export function EquipmentPage() {
               return (
                 <Link
                   key={eq.id}
-                  to={`/equipamentos/${eq.id}`}
+                  to={`/equipamentos/${encodeURIComponent(eq.id)}`}
                   viewTransition
                   className="group flex flex-col overflow-hidden rounded-2xl border transition-shadow hover:shadow-lg"
                   style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}

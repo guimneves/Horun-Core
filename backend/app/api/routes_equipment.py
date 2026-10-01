@@ -6,6 +6,7 @@ app/db/models.py."""
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
@@ -31,6 +32,24 @@ router = APIRouter(tags=["equipment"])
 
 _MAX_PHOTO_BYTES = 4 * 1024 * 1024  # 4 MB — foto de bancada, um pouco maior que retrato
 _ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+# `id` é o slug usado literalmente na URL (/equipamentos/{id}) e em toda
+# chamada de API — mesma regra do username (ver _validate_username em
+# routes_auth.py). Sem isto, um id com espaço/acento/barra quebra a rota
+# (ou fica preso atrás de um encode/decode inconsistente): a página do
+# equipamento vem em branco ou dá "não encontrado" mesmo ele existindo.
+_EQUIPMENT_ID_RE = re.compile(r"^[a-zA-Z0-9._-]{2,}$")
+
+
+def _validate_equipment_id(value: str) -> str:
+    value = value.strip()
+    if not _EQUIPMENT_ID_RE.fullmatch(value):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Id do equipamento só pode ter letras sem acento, números, ponto, hífen e sublinhado — "
+            "sem espaços (ex.: leco832).",
+        )
+    return value
 
 
 # --- Áreas do laboratório -----------------------------------------------
@@ -285,14 +304,15 @@ def list_equipment(_user: CurrentUser, session: SessionDep):
 
 @router.post("/equipment", response_model=EquipmentOut)
 def create_equipment(payload: EquipmentIn, _admin: SuperAdminUser, session: SessionDep):
-    existing = session.get(Equipment, payload.id)
+    equipment_id = _validate_equipment_id(payload.id)
+    existing = session.get(Equipment, equipment_id)
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um equipamento com esse id")
     _check_area(session, payload.area_id)
     _check_type(session, payload.type_id)
     _check_module(session, payload.module_id)
     _check_voltage(payload.voltage)
-    equipment = Equipment(**payload.model_dump())
+    equipment = Equipment(**{**payload.model_dump(), "id": equipment_id})
     session.add(equipment)
     session.commit()
     session.refresh(equipment)
@@ -346,6 +366,46 @@ def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: SuperAd
     session.commit()
     session.refresh(equipment)
     return _out(equipment)
+
+
+class EquipmentIdIn(BaseModel):
+    id: str
+
+
+@router.patch("/equipment/{equipment_id}/id", response_model=EquipmentOut)
+def rename_equipment_id(equipment_id: str, payload: EquipmentIdIn, _admin: SuperAdminUser, session: SessionDep):
+    """Troca o id (slug) do equipamento — único jeito de corrigir um
+    equipamento que nasceu com espaço/acento/barra no id antes da
+    validação existir (ver _validate_equipment_id), o que deixava a
+    página dele em branco ou "não encontrado". O id é chave primária,
+    então troca não é um UPDATE simples: cria uma linha nova com o id
+    novo, reaponta a ficha de utilização e as reservas pra ela, e só
+    então apaga a linha antiga."""
+    equipment = session.get(Equipment, equipment_id)
+    if equipment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+    new_id = _validate_equipment_id(payload.id)
+    if new_id == equipment_id:
+        return _out(equipment)
+    if session.get(Equipment, new_id) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um equipamento com esse id")
+
+    fields = equipment.model_dump(exclude={"id"})
+    new_equipment = Equipment(id=new_id, **fields)
+    session.add(new_equipment)
+    session.flush()  # a linha nova precisa existir antes de reapontar as filhas (FK)
+
+    for log in session.exec(select(EquipmentLog).where(EquipmentLog.equipment_id == equipment_id)).all():
+        log.equipment_id = new_id
+        session.add(log)
+    for reservation in session.exec(select(Reservation).where(Reservation.equipment_id == equipment_id)).all():
+        reservation.equipment_id = new_id
+        session.add(reservation)
+
+    session.delete(equipment)
+    session.commit()
+    session.refresh(new_equipment)
+    return _out(new_equipment)
 
 
 @router.delete("/equipment/{equipment_id}")
