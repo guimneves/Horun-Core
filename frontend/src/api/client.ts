@@ -479,8 +479,12 @@ export const api = {
       voltage: string
     }>,
   ) => request<Equipment>(`/equipment/${encodeURIComponent(equipmentId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  // Sempre via corpo da requisição (não path param): um id já quebrado
+  // pode ter "/" dentro, que o FastAPI trata como separador de rota
+  // antes mesmo de chegar no handler — nenhum encode de URL resolve
+  // isso. Ver POST /equipment/rename em routes_equipment.py.
   renameEquipmentId: (equipmentId: string, newId: string) =>
-    request<Equipment>(`/equipment/${encodeURIComponent(equipmentId)}/id`, { method: 'PATCH', body: JSON.stringify({ id: newId }) }),
+    request<Equipment>('/equipment/rename', { method: 'POST', body: JSON.stringify({ old_id: equipmentId, new_id: newId }) }),
   deleteEquipment: (equipmentId: string) =>
     request<{ ok: boolean }>(`/equipment/${encodeURIComponent(equipmentId)}`, { method: 'DELETE' }),
   uploadEquipmentPhoto: async (equipmentId: string, file: File) => {

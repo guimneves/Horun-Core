@@ -368,44 +368,54 @@ def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: SuperAd
     return _out(equipment)
 
 
-class EquipmentIdIn(BaseModel):
-    id: str
+class EquipmentRenameIn(BaseModel):
+    old_id: str
+    new_id: str
 
 
-@router.patch("/equipment/{equipment_id}/id", response_model=EquipmentOut)
-def rename_equipment_id(equipment_id: str, payload: EquipmentIdIn, _admin: SuperAdminUser, session: SessionDep):
-    """Troca o id (slug) do equipamento — único jeito de corrigir um
-    equipamento que nasceu com espaço/acento/barra no id antes da
-    validação existir (ver _validate_equipment_id), o que deixava a
-    página dele em branco ou "não encontrado". O id é chave primária,
-    então troca não é um UPDATE simples: cria uma linha nova com o id
-    novo, reaponta a ficha de utilização e as reservas pra ela, e só
-    então apaga a linha antiga."""
-    equipment = session.get(Equipment, equipment_id)
-    if equipment is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
-    new_id = _validate_equipment_id(payload.id)
-    if new_id == equipment_id:
-        return _out(equipment)
-    if session.get(Equipment, new_id) is not None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um equipamento com esse id")
-
+def _rename_equipment(session: Session, equipment: Equipment, new_id: str) -> Equipment:
+    """Troca o id (slug) do equipamento. O id é chave primária, então
+    troca não é um UPDATE simples: cria uma linha nova com o id novo,
+    reaponta a ficha de utilização e as reservas pra ela, e só então
+    apaga a linha antiga."""
+    old_id = equipment.id
     fields = equipment.model_dump(exclude={"id"})
     new_equipment = Equipment(id=new_id, **fields)
     session.add(new_equipment)
     session.flush()  # a linha nova precisa existir antes de reapontar as filhas (FK)
 
-    for log in session.exec(select(EquipmentLog).where(EquipmentLog.equipment_id == equipment_id)).all():
+    for log in session.exec(select(EquipmentLog).where(EquipmentLog.equipment_id == old_id)).all():
         log.equipment_id = new_id
         session.add(log)
-    for reservation in session.exec(select(Reservation).where(Reservation.equipment_id == equipment_id)).all():
+    for reservation in session.exec(select(Reservation).where(Reservation.equipment_id == old_id)).all():
         reservation.equipment_id = new_id
         session.add(reservation)
 
     session.delete(equipment)
     session.commit()
     session.refresh(new_equipment)
-    return _out(new_equipment)
+    return new_equipment
+
+
+@router.post("/equipment/rename", response_model=EquipmentOut)
+def rename_equipment(payload: EquipmentRenameIn, _admin: SuperAdminUser, session: SessionDep):
+    """Troca o id (slug) de um equipamento que nasceu com espaço/acento/
+    barra no id antes da validação existir (ver _validate_equipment_id)
+    — deixava a página dele em branco ou "não encontrado". O id atual
+    (old_id) vem no corpo da requisição, não como parâmetro de rota
+    (`/equipment/{id}/...`) — um id com barra ("/") quebraria o próprio
+    roteamento do FastAPI antes de chegar aqui (404 "Not Found" cru,
+    nem passa pelo match de rota), então isto funciona não importa o
+    que tenha no id atual."""
+    equipment = session.get(Equipment, payload.old_id)
+    if equipment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+    new_id = _validate_equipment_id(payload.new_id)
+    if new_id == payload.old_id:
+        return _out(equipment)
+    if session.get(Equipment, new_id) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um equipamento com esse id")
+    return _out(_rename_equipment(session, equipment, new_id))
 
 
 @router.delete("/equipment/{equipment_id}")
