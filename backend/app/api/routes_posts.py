@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.permissions import can_moderate
 from app.core.email import notify_user_by_email
 from app.core.groups import can_see_group, group_member_ids
 from app.db.models import Group, Notification, Post, PostReply, User
@@ -132,7 +133,7 @@ def _reply_out(reply: PostReply, author: User, session: Session, viewer: User) -
     post = session.get(Post, reply.post_id)
     can_delete = (
         reply.author_id == viewer.id
-        or viewer.is_super_admin
+        or can_moderate(viewer)
         or (post is not None and _group_internal_admin_id(session, post.group_id) == viewer.id)
     )
     return ReplyOut(
@@ -155,19 +156,19 @@ def _group_internal_admin_id(session: Session, group_id: int | None) -> int | No
 
 
 def _can_pin_post(session: Session, post: Post, user: User) -> bool:
-    return user.is_super_admin or _group_internal_admin_id(session, post.group_id) == user.id
+    return can_moderate(user) or _group_internal_admin_id(session, post.group_id) == user.id
 
 
 def _can_manage_post(session: Session, post: Post, user: User) -> bool:
-    """Remover/editar: o autor, o super-admin, ou — num mural de grupo — o
-    admin interno do grupo."""
+    """Remover/editar: o autor, quem modera (níveis 1 a 4), ou — num mural
+    de grupo — o admin interno do grupo."""
     return post.author_id == user.id or _can_pin_post(session, post, user)
 
 
 def _can_manage_reply(session: Session, post: Post | None, reply: PostReply, user: User) -> bool:
-    """Remover/editar resposta: o autor, o super-admin, ou — num mural de
-    grupo — o admin interno do grupo."""
-    return reply.author_id == user.id or user.is_super_admin or (
+    """Remover/editar resposta: o autor, quem modera (níveis 1 a 4), ou —
+    num mural de grupo — o admin interno do grupo."""
+    return reply.author_id == user.id or can_moderate(user) or (
         post is not None and _group_internal_admin_id(session, post.group_id) == user.id
     )
 

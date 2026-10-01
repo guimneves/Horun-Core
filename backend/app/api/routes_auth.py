@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, statu
 from pydantic import BaseModel, field_validator
 from sqlmodel import select
 
-from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
+from app.api.deps import CurrentUser, SessionDep, CoordinatorUser
+from app.core.permissions import LEVEL_LABELS, capabilities, is_coordinator_or_above, user_level
 from app.core.birthdays import birthdays_between
 from app.core.security import (
     SESSION_COOKIE_NAME,
@@ -104,6 +105,13 @@ class UserOut(BaseModel):
     birth_year: int | None
     email_notifications: bool
     has_photo: bool
+    # Nível de permissão (1-5) — derivado da posição, ver core/permissions.py.
+    level: int
+    level_label: str
+    # O que a pessoa pode fazer, pronto pra interface (o backend decide).
+    can: dict[str, bool]
+    # Compatibilidade: "administração geral" (nível 1 ou 2) — o mesmo que
+    # o antigo administrador máximo. Não é mais editável; vem da posição.
     is_super_admin: bool
     is_protected: bool
     onboarded: bool
@@ -121,9 +129,9 @@ class CreateUserRequest(BaseModel):
     full_name: str = ""
     email: str = ""
     phone: str = ""
+    # A posição define o nível de permissão (core/permissions.py).
     position: str = ""
     qualification: str = ""
-    is_super_admin: bool = False
 
     _validate_position = field_validator("position")(lambda v: _validate_choice(v, POSITIONS, "Posição"))
     _validate_qualification = field_validator("qualification")(
@@ -139,7 +147,8 @@ class UpdateUserRequest(BaseModel):
     username: str | None = None
     display_name: str | None = None
     password: str | None = None
-    is_super_admin: bool | None = None
+    # A posição define o nível de permissão (core/permissions.py) — não há
+    # mais um "tornar admin" separado.
     position: str | None = None
     qualification: str | None = None
 
@@ -194,7 +203,10 @@ def _out(user: User) -> UserOut:
         birth_year=user.birth_year,
         email_notifications=bool(getattr(user, "email_notifications", True)),
         has_photo=user.photo is not None,
-        is_super_admin=user.is_super_admin,
+        level=user_level(user),
+        level_label=LEVEL_LABELS[user_level(user)],
+        can=capabilities(user),
+        is_super_admin=is_coordinator_or_above(user),
         is_protected=user.is_protected,
         onboarded=bool(user.onboarded),
         setup_code=user.setup_code,
@@ -344,10 +356,9 @@ def get_user_photo(user_id: int, _user: CurrentUser, session: SessionDep):
 
 
 @router.post("/users", response_model=UserOut)
-def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: SessionDep):
-    """Só o administrador máximo cria usuários locais — importação
-    automática do AD (Prompt_Horun_Core.md, seção 4) ainda não
-    implementada."""
+def create_user(payload: CreateUserRequest, _admin: CoordinatorUser, session: SessionDep):
+    """Só coordenadores (nível ≤ 2) criam usuários locais — a importação
+    automática do AD foi descartada (Prompt_Horun_Core.md, seção 4)."""
     username = _validate_username(payload.username)
     existing = session.exec(select(User).where(User.username == username)).first()
     if existing is not None:
@@ -363,7 +374,6 @@ def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: Ses
         phone=payload.phone,
         position=payload.position,
         qualification=payload.qualification,
-        is_super_admin=payload.is_super_admin,
     )
     session.add(user)
     session.commit()
@@ -372,15 +382,15 @@ def create_user(payload: CreateUserRequest, _admin: SuperAdminUser, session: Ses
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(_admin: SuperAdminUser, session: SessionDep):
+def list_users(_admin: CoordinatorUser, session: SessionDep):
     users = session.exec(select(User)).all()
     return [_out(u) for u in users]
 
 
 class DirectoryEntryOut(BaseModel):
     """Diretório de colaboradores — aberto a qualquer autenticado. Só
-    nome/cargo/qualificação/e-mail são públicos; telefone só aparece pro
-    administrador máximo (pedido do usuário)."""
+    nome/cargo/qualificação/e-mail são públicos; telefone só aparece pra
+    coordenadores e o administrador máximo (pedido do usuário)."""
 
     id: int
     name: str  # full_name se preenchido, senão display_name
@@ -388,7 +398,7 @@ class DirectoryEntryOut(BaseModel):
     qualification: str
     email: str
     has_photo: bool
-    phone: str  # "" para quem não é administrador máximo
+    phone: str  # "" para quem não é coordenador (nível ≤ 2)
 
 
 @router.get("/users/directory", response_model=list[DirectoryEntryOut])
@@ -402,7 +412,7 @@ def users_directory(current: CurrentUser, session: SessionDep):
             qualification=u.qualification or "",
             email=u.email or "",
             has_photo=u.photo is not None,
-            phone=(u.phone or "") if current.is_super_admin else "",
+            phone=(u.phone or "") if is_coordinator_or_above(current) else "",
         )
         for u in users
     ]
@@ -441,7 +451,7 @@ def users_birthdays(
 
 
 @router.patch("/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser, session: SessionDep):
+def update_user(user_id: int, payload: UpdateUserRequest, _admin: CoordinatorUser, session: SessionDep):
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")
@@ -463,8 +473,6 @@ def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser
     if payload.password is not None:
         user.password_hash = hash_password(payload.password)
         user.setup_code = None
-    if payload.is_super_admin is not None:
-        user.is_super_admin = payload.is_super_admin
     if payload.position is not None:
         user.position = payload.position
     if payload.qualification is not None:
@@ -476,7 +484,7 @@ def update_user(user_id: int, payload: UpdateUserRequest, _admin: SuperAdminUser
 
 
 @router.post("/users/{user_id}/regenerate-setup-code", response_model=UserOut)
-def regenerate_setup_code(user_id: int, _admin: SuperAdminUser, session: SessionDep):
+def regenerate_setup_code(user_id: int, _admin: CoordinatorUser, session: SessionDep):
     """Perdeu o código de primeiro acesso, ou quer voltar alguém pro fluxo
     de 'defina sua senha' (ex. esqueceu a senha e não quer que o admin
     saiba a nova)."""
@@ -495,7 +503,7 @@ def regenerate_setup_code(user_id: int, _admin: SuperAdminUser, session: Session
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, admin: SuperAdminUser, session: SessionDep):
+def delete_user(user_id: int, admin: CoordinatorUser, session: SessionDep):
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")

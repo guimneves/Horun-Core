@@ -140,9 +140,36 @@ def _run_migrations() -> None:
             conn.exec_driver_sql('ALTER TABLE "module" DROP COLUMN IF EXISTS codename')
 
 
+def migrate_promoted_admins_to_coordinators(bind=None) -> int:
+    """Níveis de permissão (core/permissions.py) passaram a vir da POSIÇÃO.
+    Quem tinha sido promovido a "administrador máximo" (is_super_admin, sem
+    ser a conta original) vira Coordenador(a) — o nível que manteve quase
+    todos os poderes (decisão do usuário, 2026-10-01) — e a flag é zerada.
+
+    Zerar a flag é o que torna isto idempotente e seguro: sem isso, a
+    próxima subida forçaria a posição de volta para Coordenador(a) mesmo
+    depois de alguém mudá-la. A conta original (is_protected) mantém a
+    flag e é nível 1 de qualquer jeito. Devolve quantas contas mudaram."""
+    from sqlmodel import select
+
+    from app.db.models import User
+
+    with Session(bind or engine) as session:
+        promoted = session.exec(
+            select(User).where(User.is_super_admin == True, User.is_protected == False)  # noqa: E712
+        ).all()
+        for user in promoted:
+            user.position = "Coordenador(a)"
+            user.is_super_admin = False
+            session.add(user)
+        session.commit()
+        return len(promoted)
+
+
 def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     _run_migrations()
+    migrate_promoted_admins_to_coordinators()
 
 
 def get_session() -> Generator[Session, None, None]:

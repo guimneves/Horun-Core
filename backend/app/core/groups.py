@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from app.db.models import Group, GroupMembership, User
+from app.core.permissions import is_coordinator_or_above
 
 
 def member_group_ids(session: Session, user_id: int) -> set[int]:
@@ -35,11 +36,10 @@ def is_member(session: Session, group_id: int, user_id: int) -> bool:
 
 
 def can_manage_group(group: Group, user: User) -> bool:
-    """Gerenciar membros / editar o grupo / criar evento do grupo: o
-    super-admin do Core ou o admin interno do grupo (que também é
-    super-admin, por regra)."""
-    return user.is_super_admin or group.internal_admin_id == user.id
+    """Gerenciar membros / editar o grupo / criar evento do grupo: um
+    coordenador do Core (nível ≤ 2) ou o admin interno do grupo."""
+    return is_coordinator_or_above(user) or group.internal_admin_id == user.id
 
 
 def can_see_group(session: Session, group: Group, user: User) -> bool:
-    return user.is_super_admin or is_member(session, group.id, user.id)
+    return is_coordinator_or_above(user) or is_member(session, group.id, user.id)

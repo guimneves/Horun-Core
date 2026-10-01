@@ -35,6 +35,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** O que a pessoa pode fazer — calculado no backend a partir do nível
+ * (core/permissions.py). A interface só esconde o que seria recusado. */
+export interface Capabilities {
+  manage_users: boolean
+  manage_access: boolean
+  manage_groups: boolean
+  manage_modules: boolean
+  manage_equipment: boolean
+  moderate: boolean
+  read_suggestions: boolean
+}
+
 export interface CurrentUser {
   id: number
   username: string
@@ -49,6 +61,11 @@ export interface CurrentUser {
   birth_year: number | null
   email_notifications: boolean
   has_photo: boolean
+  /** Nível de permissão 1-5, derivado da posição (1 = administrador máximo, só a conta original) */
+  level: number
+  level_label: string
+  can: Capabilities
+  /** Legado: true para nível 1 ou 2. Use `can` para decidir o que mostrar. */
   is_super_admin: boolean
   is_protected: boolean
   onboarded: boolean
@@ -348,7 +365,6 @@ export const api = {
     phone?: string
     position?: string
     qualification?: string
-    is_super_admin?: boolean
   }) => request<CurrentUser>('/users', { method: 'POST', body: JSON.stringify(payload) }),
   updateUser: (
     userId: number,
@@ -356,7 +372,6 @@ export const api = {
       username?: string
       display_name?: string
       password?: string
-      is_super_admin?: boolean
       position?: string
       qualification?: string
     },

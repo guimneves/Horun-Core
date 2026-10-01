@@ -104,6 +104,20 @@ def get_identity(
 
 Use `Depends(get_identity)` nas rotas que precisam saber quem é o usuário — **não implemente seu próprio sistema de login/senha/cookie de sessão**, isso é responsabilidade do Core, não do módulo. Com `HORUN_DEV_MODE=true` no ambiente, o módulo roda sozinho, sem o Core, com um usuário fixo — é assim que você desenvolve e testa localmente.
 
+**O que cada cabeçalho significa**:
+
+| Cabeçalho | Valor | Uso |
+|---|---|---|
+| `X-Horun-User-Id` | id numérico do usuário no Core | chave estável da pessoa (use este, não o nome, para guardar autoria) |
+| `X-Horun-User` | nome de usuário (slug, sem espaço nem acento) | exibição, menções |
+| `X-Horun-Role` | `admin` ou `user` | `admin` = coordenador ou administrador máximo do Core |
+| `X-Horun-Level` | `1` a `5` | **opcional** — nível de permissão do Core: 1 administrador máximo, 2 coordenador, 3 pesquisador, 4 técnico, 5 iniciação científica (ou sem posição) |
+| `X-Horun-Level-Name` | `admin`, `coordenador`, `pesquisador`, `tecnico` ou `ic` | **opcional** — o mesmo nível, por nome (sem acento) |
+
+Os dois últimos existem desde 2026-10-01 e **não são obrigatórios**: um módulo que só olha `X-Horun-Role` continua funcionando igual. Use o nível só se o módulo quiser diferenciar, por exemplo, técnico de IC. Para lê-los, acrescente `x_horun_level`/`x_horun_level_name` ao `get_identity` (o `module-template` já traz os campos `level`/`level_name`, com 5/`ic` como padrão quando o cabeçalho não vem).
+
+**Nomes reservados**: o Core descarta qualquer `X-Horun-User-Id`, `X-Horun-User`, `X-Horun-Role`, `X-Horun-Level` ou `X-Horun-Level-Name` que venha do navegador e injeta os verdadeiros. Outros cabeçalhos `X-Horun-*` do próprio módulo (ex. `X-Horun-Coordenador-Token` do Financeiro) passam normalmente. O cookie de sessão do Core (`horun_core_session`) **não** é repassado ao módulo. Isso só protege o módulo se ele **nunca for alcançável por fora do Core** — nenhuma porta publicada no host (regra do item 3).
+
 **`Dockerfile`** (mesmo padrão em todo módulo):
 ```dockerfile
 FROM python:3.11-slim

@@ -125,3 +125,73 @@ def test_proxy_without_trailing_slash_redirects(super_admin_client):
     r = super_admin_client.get("/m/re7s", follow_redirects=False)
     assert r.status_code in (302, 307)
     assert r.headers["location"] == "/m/re7s/"
+
+
+# ---------- identidade forjada (correção de 2026-10-01) ----------
+
+
+def _sent_identity(call, name):
+    """Todos os valores com esse nome que chegariam ao módulo (sem
+    diferenciar maiúsculas — é assim que o módulo lê)."""
+    return [v for k, v in call["headers"].items() if k.lower() == name.lower()]
+
+
+def test_client_cannot_forge_identity_headers(super_admin_client, user_a_client, user_a, monkeypatch):
+    # Antes: o navegador mandava X-Horun-Role: admin, o Core repassava junto
+    # com o verdadeiro e o módulo lia o forjado (primeiro da lista).
+    _register_module(super_admin_client)
+    super_admin_client.post("/modules/re7s/access", json={"user_id": user_a.id})
+    _FakeAsyncClient.calls.clear()
+    monkeypatch.setattr(routes_proxy.httpx, "AsyncClient", _FakeAsyncClient)
+
+    forged = {
+        "X-Horun-Role": "admin",
+        "X-Horun-User-Id": "1",
+        "X-Horun-User": "superadmin",
+        "X-Horun-Level": "1",
+        "X-Horun-Level-Name": "admin",
+    }
+    assert user_a_client.get("/m/re7s/api/whoami", headers=forged).status_code == 200
+    call = _FakeAsyncClient.calls[0]
+    assert _sent_identity(call, "X-Horun-Role") == ["user"]
+    assert _sent_identity(call, "X-Horun-User-Id") == [str(user_a.id)]
+    assert _sent_identity(call, "X-Horun-User") == ["usuario-a"]
+    assert _sent_identity(call, "X-Horun-Level") == ["5"]
+    assert _sent_identity(call, "X-Horun-Level-Name") == ["ic"]
+
+
+def test_module_specific_horun_headers_still_pass(super_admin_client, monkeypatch):
+    # Ex.: o Financeiro manda X-Horun-Coordenador-Token do próprio frontend.
+    _register_module(super_admin_client)
+    _FakeAsyncClient.calls.clear()
+    monkeypatch.setattr(routes_proxy.httpx, "AsyncClient", _FakeAsyncClient)
+    super_admin_client.get("/m/re7s/api/x", headers={"X-Horun-Coordenador-Token": "abc.def"})
+    assert _sent_identity(_FakeAsyncClient.calls[0], "X-Horun-Coordenador-Token") == ["abc.def"]
+
+
+def test_core_session_cookie_is_not_forwarded(super_admin_client, monkeypatch):
+    _register_module(super_admin_client)
+    _FakeAsyncClient.calls.clear()
+    monkeypatch.setattr(routes_proxy.httpx, "AsyncClient", _FakeAsyncClient)
+    super_admin_client.cookies.set("cookie_do_modulo", "valor")
+    super_admin_client.get("/m/re7s/api/x")
+    cookies = " ".join(_sent_identity(_FakeAsyncClient.calls[0], "cookie"))
+    assert "horun_core_session" not in cookies
+    assert "cookie_do_modulo=valor" in cookies
+
+
+def test_level_headers_follow_the_position(super_admin_client, db_engine, app_with_overrides, monkeypatch):
+    from tests.conftest import _create_user, _login
+
+    _register_module(super_admin_client)
+    tec = _create_user(db_engine, "tecnico1", "senha-123", position="Técnico(a)")
+    super_admin_client.post("/modules/re7s/access", json={"user_id": tec.id})
+    client = _login(app_with_overrides, "tecnico1", "senha-123")
+    _FakeAsyncClient.calls.clear()
+    monkeypatch.setattr(routes_proxy.httpx, "AsyncClient", _FakeAsyncClient)
+    client.get("/m/re7s/api/x")
+    call = _FakeAsyncClient.calls[0]
+    assert _sent_identity(call, "X-Horun-Level") == ["4"]
+    assert _sent_identity(call, "X-Horun-Level-Name") == ["tecnico"]
+    # X-Horun-Role continua só admin/user: técnico não é "admin" do Core
+    assert _sent_identity(call, "X-Horun-Role") == ["user"]

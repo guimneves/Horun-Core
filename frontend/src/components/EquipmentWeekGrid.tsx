@@ -52,7 +52,7 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
   }
   useEffect(reload, [monday, equipment.id])
 
-  const canEdit = (r: Reservation) => r.user_id === user?.id || !!user?.is_super_admin
+  const canEdit = (r: Reservation) => r.user_id === user?.id || !!user?.can.moderate
   const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
 
   return (

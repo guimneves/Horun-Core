@@ -258,7 +258,7 @@ export function AgendaPage() {
   // escopo só filtra quais eventos aparecem e onde um novo evento entra.
   const scopedEvents = events.filter((e) => (scope === null ? e.group_id == null : e.group_id === scope))
   const groupColor = (gid: number | null) => (gid == null ? 'var(--color-primary)' : myGroups.find((g) => g.id === gid)?.color ?? 'var(--color-primary)')
-  const canCreateEventHere = scope === null ? !!user?.is_super_admin : !!myGroups.find((g) => g.id === scope)?.can_manage
+  const canCreateEventHere = scope === null ? !!user?.can.moderate : !!myGroups.find((g) => g.id === scope)?.can_manage
 
   function toggleEquipment(id: string) {
     setHidden((prev) => {
@@ -273,7 +273,7 @@ export function AgendaPage() {
     })
   }
 
-  const canEditReservation = (r: Reservation) => r.user_id === user?.id || !!user?.is_super_admin
+  const canEditReservation = (r: Reservation) => r.user_id === user?.id || !!user?.can.moderate
   const canEditEvent = (e: CalendarEvent) => e.can_manage
 
   function birthdaysForDay(day: Date) {

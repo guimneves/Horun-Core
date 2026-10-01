@@ -14,10 +14,23 @@ import {
   type ModuleContributor,
   type ModuleFull,
 } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 
 const TABS = ['Usuários', 'Grupos', 'Módulos', 'Equipamentos', 'Permissões'] as const
 type Tab = (typeof TABS)[number]
+
+// Cada aba aparece para quem tem a capacidade correspondente (o backend
+// recusa de qualquer jeito — ver core/permissions.py). Coordenadores não
+// veem "Módulos" (cadastro/integração é só do administrador máximo);
+// técnicos só veem "Equipamentos".
+const TAB_CAPABILITY: Record<Tab, keyof CurrentUser['can']> = {
+  Usuários: 'manage_users',
+  Grupos: 'manage_groups',
+  Módulos: 'manage_modules',
+  Equipamentos: 'manage_equipment',
+  Permissões: 'manage_access',
+}
 
 // Nome de usuário e id de equipamento têm que ser um slug (sem espaço,
 // sem acento) — senão a menção `@usuario` quebra no espaço (e a pessoa
@@ -288,7 +301,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
               <Th>Usuário</Th>
               <Th>Posição</Th>
               <Th>Qualificação</Th>
-              <Th>Papel</Th>
+              <Th>Nível</Th>
               <Th>Status</Th>
               <Th right>Ações</Th>
             </tr>
@@ -326,16 +339,17 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                   />
                 </Td>
                 <Td>
-                  {u.is_super_admin ? (
-                    <span
-                      className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
-                      style={{ color: 'var(--color-primary)', background: 'var(--color-surface)' }}
-                    >
-                      Administrador máximo
-                    </span>
-                  ) : (
-                    <span style={{ color: 'var(--color-text-muted)' }}>Usuário</span>
-                  )}
+                  {/* o nível vem da posição (coluna ao lado) — não há "tornar admin" */}
+                  <span
+                    className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+                    style={{
+                      color: u.level <= 2 ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      background: 'var(--color-surface)',
+                    }}
+                    title={`Nível ${u.level}`}
+                  >
+                    {u.level} · {u.level_label}
+                  </span>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-2">
@@ -359,15 +373,6 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 </Td>
                 <Td right>
                   <div className="flex items-center justify-end gap-3">
-                    {!u.is_protected && (
-                      <button
-                        className="text-xs"
-                        style={{ color: 'var(--color-text-muted)' }}
-                        onClick={() => runAction(api.updateUser(u.id, { is_super_admin: !u.is_super_admin }))}
-                      >
-                        {u.is_super_admin ? 'remover admin' : 'tornar admin'}
-                      </button>
-                    )}
                     {!u.is_protected && (
                       <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
                         renomear
@@ -1033,7 +1038,8 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
   const [color, setColor] = useState('#5c6bc4')
   const [adminId, setAdminId] = useState<number | ''>('')
 
-  const admins = users.filter((u) => u.is_super_admin)
+  // admin interno do grupo: quem já modera no Core (níveis 1 a 4, não IC)
+  const admins = users.filter((u) => u.can.moderate)
 
   function reload() {
     api.listGroups().then(setGroups)
@@ -1217,7 +1223,12 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
 }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<Tab>('Usuários')
+  const { user } = useAuth()
+  const visibleTabs = TABS.filter((t) => !!user?.can[TAB_CAPABILITY[t]])
+  const [tab, setTab] = useState<Tab>(visibleTabs[0] ?? 'Equipamentos')
+  // listas que só coordenadores (ou o nível 1) podem ler
+  const canReadUsers = !!(user?.can.manage_users || user?.can.manage_access || user?.can.manage_groups)
+  const canReadModules = !!(user?.can.manage_access || user?.can.manage_modules)
   const [modules, setModules] = useState<ModuleFull[]>([])
   const [users, setUsers] = useState<CurrentUser[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -1226,10 +1237,10 @@ export function AdminPage() {
   const [types, setTypes] = useState<EquipmentType[]>([])
 
   const reloadModules = () => {
-    api.listModules().then(setModules)
+    if (canReadModules) api.listModules().then(setModules)
   }
   const reloadUsers = () => {
-    api.listUsers().then(setUsers)
+    if (canReadUsers) api.listUsers().then(setUsers)
   }
   const reloadEquipment = () => {
     setEquipmentError(null)
@@ -1255,11 +1266,13 @@ export function AdminPage() {
     <div className="p-6">
       <div className="mb-1 text-xl font-semibold">Administração</div>
       <div className="mb-5 text-[13.5px]" style={{ color: 'var(--color-text-muted)' }}>
-        Usuários, módulos, equipamentos e permissões da plataforma.
+        {user?.can.manage_users
+          ? 'Usuários, módulos, equipamentos e permissões da plataforma.'
+          : 'Equipamentos, áreas e tipos do laboratório.'}
       </div>
 
       <div className="mb-5 flex gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}

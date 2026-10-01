@@ -56,7 +56,7 @@ export function EquipmentPage() {
   const [areaFilter, setAreaFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const isAdmin = !!user?.is_super_admin
+  const isAdmin = !!user?.can.manage_equipment
 
   useEffect(() => {
     // Sem isto, uma falha aqui (ex. backend desatualizado numa coluna

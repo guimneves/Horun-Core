@@ -50,7 +50,11 @@ export function EquipmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const isAdmin = !!user?.is_super_admin
+  // Editar o equipamento: coordenador ou técnico. Mexer no MÓDULO vinculado
+  // (ícone) é integração de módulo — só o administrador máximo.
+  const isAdmin = !!user?.can.manage_equipment
+  const canEditModule = !!user?.can.manage_modules
+  const canListAllModules = !!user?.can.manage_access
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -87,8 +91,10 @@ export function EquipmentDetailPage() {
   }
   useEffect(reload, [])
   useEffect(() => {
-    if (isAdmin) api.listModules().then(setModuleFulls).catch(() => {})
-  }, [isAdmin])
+    // lista completa (com os ocultos) só pra coordenadores; o técnico escolhe
+    // entre os módulos que já enxerga no catálogo
+    if (canListAllModules) api.listModules().then(setModuleFulls).catch(() => {})
+  }, [canListAllModules])
 
   const eq = equipment.find((e) => e.id === id) ?? null
 
@@ -367,14 +373,14 @@ export function EquipmentDetailPage() {
               style={fieldStyle}
             >
               <option value="">Nenhum</option>
-              {moduleFulls.map((m) => (
+              {(moduleFulls.length > 0 ? moduleFulls : modules).map((m) => (
                 <option key={m.id} value={m.id}>{m.display_name}</option>
               ))}
             </select>
           )}
           {linkedModule ? (
             <div className="flex items-center gap-2.5">
-              {isAdmin ? (
+              {canEditModule ? (
                 <input
                   value={icon}
                   onChange={(e) => setIcon(e.target.value)}

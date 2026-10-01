@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.permissions import can_moderate
 from app.db.models import Equipment, Reservation, User
 
 router = APIRouter(tags=["reservations"])
@@ -134,7 +135,7 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
     reservation = session.get(Reservation, reservation_id)
     if reservation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reserva não encontrada")
-    if reservation.user_id != user.id and not user.is_super_admin:
+    if reservation.user_id != user.id and not can_moderate(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem reservou ou o administrador máximo pode reagendar")
 
     if payload.end_at <= payload.start_at:
@@ -165,7 +166,7 @@ def delete_reservation(reservation_id: int, user: CurrentUser, session: SessionD
     reservation = session.get(Reservation, reservation_id)
     if reservation is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reserva não encontrada")
-    if reservation.user_id != user.id and not user.is_super_admin:
+    if reservation.user_id != user.id and not can_moderate(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem reservou ou o administrador máximo pode cancelar")
     session.delete(reservation)
     session.commit()

@@ -22,6 +22,7 @@ import { MuralIcon, ModulesIcon, AgendaIcon, AdminIcon, PeopleIcon, EquipmentIco
 import { readHiddenModules, onHiddenModulesChange } from './sidebarModules'
 import horunIcon from './assets/horun-icon.png'
 import nqtrLogo from './assets/nqtr-logo.png'
+import { canOpenAdmin } from './lib/permissions'
 
 const NAV_ITEMS = [{ to: '/', label: 'Mural', icon: MuralIcon, end: true }]
 
@@ -104,7 +105,7 @@ function SideNav() {
           Colaboradores
         </NavLink>
 
-        {user?.is_super_admin && (
+        {canOpenAdmin(user) && (
           <NavLink to="/admin" className={navLinkClass} style={navLinkStyle}>
             <AdminIcon />
             Administração
@@ -126,7 +127,7 @@ function SideNav() {
           <div className="min-w-0">
             <div className="truncate text-[12.5px] font-semibold">{user.display_name || user.username}</div>
             <div className="text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>
-              {user.is_super_admin ? 'Administrador máximo' : 'Usuário'}
+              {user.level_label}
             </div>
           </div>
         </Link>
@@ -185,11 +186,11 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function RequireSuperAdmin({ children }: { children: React.ReactNode }) {
+function RequireAdminAccess({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <p className="p-6">Carregando…</p>
   if (!user) return <Navigate to="/login" replace />
-  if (!user.is_super_admin) return <Navigate to="/" replace />
+  if (!canOpenAdmin(user)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -282,11 +283,11 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <RequireSuperAdmin>
+              <RequireAdminAccess>
                 <Shell>
                   <AdminPage />
                 </Shell>
-              </RequireSuperAdmin>
+              </RequireAdminAccess>
             }
           />
         </Routes>

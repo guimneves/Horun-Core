@@ -221,7 +221,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
             </thead>
             <tbody>
               {logs.map((log) => {
-                const canEdit = log.user_id === user?.id || !!user?.is_super_admin
+                const canEdit = log.user_id === user?.id || !!user?.can.moderate
                 if (editingId === log.id) {
                   return (
                     <tr key={log.id}>
@@ -243,7 +243,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
                     <td className="py-1.5 pr-3 whitespace-nowrap">
                       {log.verified_by_name ? (
                         <span style={{ color: 'var(--color-text-muted)' }}>✓ {log.verified_by_name}</span>
-                      ) : user?.is_super_admin ? (
+                      ) : user?.can.moderate ? (
                         <button onClick={() => handleVerify(log.id)} className="underline" style={{ color: 'var(--color-primary)' }}>
                           conferir
                         </button>

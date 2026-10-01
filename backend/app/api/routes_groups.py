@@ -11,7 +11,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import select
 
-from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
+from app.api.deps import CurrentUser, SessionDep, CoordinatorUser
+from app.core.permissions import can_moderate, is_coordinator_or_above
 from app.core.groups import can_manage_group, can_see_group, member_group_ids
 from app.db.models import Event, Group, GroupMembership, Post, PostReply, User
 
@@ -72,14 +73,16 @@ def _out(session: SessionDep, g: Group, user: User) -> GroupOut:
     )
 
 
-def _require_super_admin_target(session: SessionDep, user_id: int) -> User:
+def _require_internal_admin_target(session: SessionDep, user_id: int) -> User:
+    # O admin interno modera o grupo — tem que ter, no Core, um nível que
+    # já modera (1 a 4: coordenador, pesquisador ou técnico; não IC).
     target = session.get(User, user_id)
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")
-    if not target.is_super_admin:
+    if not can_moderate(target):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "O admin interno do grupo tem que ser um administrador máximo do Horun.",
+            "O admin interno do grupo tem que ser coordenador, pesquisador ou técnico.",
         )
     return target
 
@@ -97,17 +100,17 @@ def _add_member(session: SessionDep, group_id: int, user_id: int, added_by_id: i
 @router.get("/groups", response_model=list[GroupOut])
 def list_groups(user: CurrentUser, session: SessionDep):
     groups = session.exec(select(Group).order_by(Group.name)).all()
-    if not user.is_super_admin:
+    if not is_coordinator_or_above(user):
         mine = member_group_ids(session, user.id)
         groups = [g for g in groups if g.id in mine or g.internal_admin_id == user.id]
     return [_out(session, g, user) for g in groups]
 
 
 @router.post("/groups", response_model=GroupOut)
-def create_group(payload: GroupIn, admin: SuperAdminUser, session: SessionDep):
+def create_group(payload: GroupIn, admin: CoordinatorUser, session: SessionDep):
     if not payload.name.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O grupo precisa de um nome")
-    _require_super_admin_target(session, payload.internal_admin_id)
+    _require_internal_admin_target(session, payload.internal_admin_id)
     group = Group(
         name=payload.name.strip(),
         description=payload.description.strip(),
@@ -137,9 +140,9 @@ def update_group(group_id: int, payload: GroupUpdate, user: CurrentUser, session
     if payload.color is not None:
         group.color = payload.color
     if payload.internal_admin_id is not None and payload.internal_admin_id != group.internal_admin_id:
-        if not user.is_super_admin:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o administrador máximo troca o admin interno")
-        _require_super_admin_target(session, payload.internal_admin_id)
+        if not is_coordinator_or_above(user):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Só coordenadores trocam o admin interno")
+        _require_internal_admin_target(session, payload.internal_admin_id)
         group.internal_admin_id = payload.internal_admin_id
         _add_member(session, group.id, payload.internal_admin_id, user.id)
 
@@ -150,7 +153,7 @@ def update_group(group_id: int, payload: GroupUpdate, user: CurrentUser, session
 
 
 @router.delete("/groups/{group_id}")
-def delete_group(group_id: int, _admin: SuperAdminUser, session: SessionDep):
+def delete_group(group_id: int, _admin: CoordinatorUser, session: SessionDep):
     group = session.get(Group, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")

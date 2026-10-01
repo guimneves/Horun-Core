@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlmodel import Session
 
+from app.core.permissions import can_manage_equipment, can_manage_modules, can_moderate, is_coordinator_or_above
 from app.core.security import SESSION_COOKIE_NAME, read_session_token
 from app.db.models import User
 from app.db.session import get_session
@@ -26,15 +27,50 @@ def get_current_user(request: Request, session: SessionDep) -> User:
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-def require_super_admin(user: CurrentUser) -> User:
-    """Dependência para rotas restritas ao administrador máximo (seção 6
-    do Prompt_Horun_Core.md) — cadastro de módulos e permissões."""
-    if not user.is_super_admin:
+# Níveis de permissão: regra em app/core/permissions.py (seção 6 do
+# Prompt_Horun_Core.md). Cada dependência abaixo corresponde a uma
+# capacidade, não a um nível — a rota diz O QUE exige, não QUEM.
+
+
+def require_coordinator(user: CurrentUser) -> User:
+    """Administração geral (usuários, permissões de módulo, grupos) — nível
+    2 (Coordenador) ou 1."""
+    if not is_coordinator_or_above(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação restrita a coordenadores")
+    return user
+
+
+CoordinatorUser = Annotated[User, Depends(require_coordinator)]
+
+
+def require_module_admin(user: CurrentUser) -> User:
+    """Cadastro e integração de módulos — só o nível 1."""
+    if not can_manage_modules(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação restrita ao administrador máximo")
     return user
 
 
-SuperAdminUser = Annotated[User, Depends(require_super_admin)]
+ModuleAdminUser = Annotated[User, Depends(require_module_admin)]
+
+
+def require_equipment_manager(user: CurrentUser) -> User:
+    """Equipamentos, áreas e tipos — níveis 1, 2 e 4 (Técnico)."""
+    if not can_manage_equipment(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação restrita a coordenadores e técnicos")
+    return user
+
+
+EquipmentManagerUser = Annotated[User, Depends(require_equipment_manager)]
+
+
+def require_moderator(user: CurrentUser) -> User:
+    """Mexer no que é de outras pessoas (moderação) — níveis 1 a 4."""
+    if not can_moderate(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação restrita a pesquisadores, técnicos e coordenadores")
+    return user
+
+
+ModeratorUser = Annotated[User, Depends(require_moderator)]
 
 
 def require_protected(user: CurrentUser) -> User:

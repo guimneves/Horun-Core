@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.permissions import can_moderate, is_coordinator_or_above
 from app.core.groups import can_see_group, member_group_ids
 from app.db.models import Event, Group, User
 
@@ -27,8 +28,8 @@ def _group_internal_admin_id(session: SessionDep, group_id: int | None) -> int |
 
 def _can_manage_event(session: SessionDep, ev: Event, user: User) -> bool:
     if ev.group_id is None:
-        return user.is_super_admin
-    return user.is_super_admin or _group_internal_admin_id(session, ev.group_id) == user.id
+        return can_moderate(user)  # evento do laboratório: níveis 1 a 4
+    return is_coordinator_or_above(user) or _group_internal_admin_id(session, ev.group_id) == user.id
 
 
 def _naive(value: datetime) -> datetime:
@@ -99,13 +100,15 @@ def list_events(
 
 def _validate_event_scope(session: SessionDep, group_id: int | None, user: User) -> None:
     if group_id is None:
-        if not user.is_super_admin:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o administrador máximo cria eventos do laboratório")
+        if not can_moderate(user):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Só pesquisadores, técnicos e coordenadores criam eventos do laboratório"
+            )
         return
     group = session.get(Group, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Grupo não encontrado")
-    if not (user.is_super_admin or group.internal_admin_id == user.id):
+    if not (is_coordinator_or_above(user) or group.internal_admin_id == user.id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o admin interno do grupo cria eventos do grupo")
 
 

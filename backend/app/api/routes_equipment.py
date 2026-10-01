@@ -15,7 +15,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
+from app.api.deps import CurrentUser, EquipmentManagerUser, ModeratorUser, SessionDep
+from app.core.permissions import can_moderate
 from app.db.models import (
     EQUIPMENT_VOLTAGES,
     USAGE_PURPOSES,
@@ -75,7 +76,7 @@ def list_equipment_areas(_user: CurrentUser, session: SessionDep):
 
 
 @router.post("/equipment-areas", response_model=EquipmentAreaOut)
-def create_equipment_area(payload: EquipmentAreaIn, _admin: SuperAdminUser, session: SessionDep):
+def create_equipment_area(payload: EquipmentAreaIn, _admin: EquipmentManagerUser, session: SessionDep):
     area = EquipmentArea(name=payload.name)
     session.add(area)
     session.commit()
@@ -84,7 +85,7 @@ def create_equipment_area(payload: EquipmentAreaIn, _admin: SuperAdminUser, sess
 
 
 @router.patch("/equipment-areas/{area_id}", response_model=EquipmentAreaOut)
-def update_equipment_area(area_id: int, payload: EquipmentAreaIn, _admin: SuperAdminUser, session: SessionDep):
+def update_equipment_area(area_id: int, payload: EquipmentAreaIn, _admin: EquipmentManagerUser, session: SessionDep):
     area = session.get(EquipmentArea, area_id)
     if area is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Área não encontrada")
@@ -96,7 +97,7 @@ def update_equipment_area(area_id: int, payload: EquipmentAreaIn, _admin: SuperA
 
 
 @router.delete("/equipment-areas/{area_id}")
-def delete_equipment_area(area_id: int, _admin: SuperAdminUser, session: SessionDep):
+def delete_equipment_area(area_id: int, _admin: EquipmentManagerUser, session: SessionDep):
     area = session.get(EquipmentArea, area_id)
     if area is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Área não encontrada")
@@ -134,7 +135,7 @@ def list_equipment_types(_user: CurrentUser, session: SessionDep):
 
 
 @router.post("/equipment-types", response_model=EquipmentTypeOut)
-def create_equipment_type(payload: EquipmentTypeIn, _admin: SuperAdminUser, session: SessionDep):
+def create_equipment_type(payload: EquipmentTypeIn, _admin: EquipmentManagerUser, session: SessionDep):
     et = EquipmentType(name=payload.name)
     session.add(et)
     session.commit()
@@ -143,7 +144,7 @@ def create_equipment_type(payload: EquipmentTypeIn, _admin: SuperAdminUser, sess
 
 
 @router.patch("/equipment-types/{type_id}", response_model=EquipmentTypeOut)
-def update_equipment_type(type_id: int, payload: EquipmentTypeIn, _admin: SuperAdminUser, session: SessionDep):
+def update_equipment_type(type_id: int, payload: EquipmentTypeIn, _admin: EquipmentManagerUser, session: SessionDep):
     et = session.get(EquipmentType, type_id)
     if et is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tipo não encontrado")
@@ -155,7 +156,7 @@ def update_equipment_type(type_id: int, payload: EquipmentTypeIn, _admin: SuperA
 
 
 @router.delete("/equipment-types/{type_id}")
-def delete_equipment_type(type_id: int, _admin: SuperAdminUser, session: SessionDep):
+def delete_equipment_type(type_id: int, _admin: EquipmentManagerUser, session: SessionDep):
     et = session.get(EquipmentType, type_id)
     if et is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tipo não encontrado")
@@ -303,7 +304,7 @@ def list_equipment(_user: CurrentUser, session: SessionDep):
 
 
 @router.post("/equipment", response_model=EquipmentOut)
-def create_equipment(payload: EquipmentIn, _admin: SuperAdminUser, session: SessionDep):
+def create_equipment(payload: EquipmentIn, _admin: EquipmentManagerUser, session: SessionDep):
     equipment_id = _validate_equipment_id(payload.id)
     existing = session.get(Equipment, equipment_id)
     if existing is not None:
@@ -320,7 +321,7 @@ def create_equipment(payload: EquipmentIn, _admin: SuperAdminUser, session: Sess
 
 
 @router.patch("/equipment/{equipment_id}", response_model=EquipmentOut)
-def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: SuperAdminUser, session: SessionDep):
+def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: EquipmentManagerUser, session: SessionDep):
     equipment = session.get(Equipment, equipment_id)
     if equipment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
@@ -398,7 +399,7 @@ def _rename_equipment(session: Session, equipment: Equipment, new_id: str) -> Eq
 
 
 @router.post("/equipment/rename", response_model=EquipmentOut)
-def rename_equipment(payload: EquipmentRenameIn, _admin: SuperAdminUser, session: SessionDep):
+def rename_equipment(payload: EquipmentRenameIn, _admin: EquipmentManagerUser, session: SessionDep):
     """Troca o id (slug) de um equipamento que nasceu com espaço/acento/
     barra no id antes da validação existir (ver _validate_equipment_id)
     — deixava a página dele em branco ou "não encontrado". O id atual
@@ -419,7 +420,7 @@ def rename_equipment(payload: EquipmentRenameIn, _admin: SuperAdminUser, session
 
 
 @router.delete("/equipment/{equipment_id}")
-def delete_equipment(equipment_id: str, _admin: SuperAdminUser, session: SessionDep):
+def delete_equipment(equipment_id: str, _admin: EquipmentManagerUser, session: SessionDep):
     equipment = session.get(Equipment, equipment_id)
     if equipment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
@@ -448,7 +449,7 @@ def delete_equipment(equipment_id: str, _admin: SuperAdminUser, session: Session
 
 
 @router.post("/equipment/{equipment_id}/photo", response_model=EquipmentOut)
-async def upload_equipment_photo(equipment_id: str, file: UploadFile, _admin: SuperAdminUser, session: SessionDep):
+async def upload_equipment_photo(equipment_id: str, file: UploadFile, _admin: EquipmentManagerUser, session: SessionDep):
     equipment = session.get(Equipment, equipment_id)
     if equipment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
@@ -467,7 +468,7 @@ async def upload_equipment_photo(equipment_id: str, file: UploadFile, _admin: Su
 
 
 @router.delete("/equipment/{equipment_id}/photo", response_model=EquipmentOut)
-def delete_equipment_photo(equipment_id: str, _admin: SuperAdminUser, session: SessionDep):
+def delete_equipment_photo(equipment_id: str, _admin: EquipmentManagerUser, session: SessionDep):
     equipment = session.get(Equipment, equipment_id)
     if equipment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
@@ -596,7 +597,7 @@ def update_equipment_log(equipment_id: str, log_id: int, payload: EquipmentLogPa
     log = session.get(EquipmentLog, log_id)
     if log is None or log.equipment_id != equipment_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Registro não encontrado")
-    if log.user_id != user.id and not user.is_super_admin:
+    if log.user_id != user.id and not can_moderate(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem registrou ou o administrador máximo pode editar")
 
     if payload.purpose is not None:
@@ -621,7 +622,7 @@ def update_equipment_log(equipment_id: str, log_id: int, payload: EquipmentLogPa
 
 
 @router.post("/equipment/{equipment_id}/logs/{log_id}/verify", response_model=EquipmentLogOut)
-def verify_equipment_log(equipment_id: str, log_id: int, admin: SuperAdminUser, session: SessionDep):
+def verify_equipment_log(equipment_id: str, log_id: int, admin: ModeratorUser, session: SessionDep):
     """"Conferido por" da ficha de papel — só o administrador máximo,
     não precisa ser quem registrou (é justamente uma checagem externa)."""
     log = session.get(EquipmentLog, log_id)
@@ -641,7 +642,7 @@ def delete_equipment_log(equipment_id: str, log_id: int, user: CurrentUser, sess
     log = session.get(EquipmentLog, log_id)
     if log is None or log.equipment_id != equipment_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Registro não encontrado")
-    if log.user_id != user.id and not user.is_super_admin:
+    if log.user_id != user.id and not can_moderate(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem registrou ou o administrador máximo pode remover")
     session.delete(log)
     session.commit()

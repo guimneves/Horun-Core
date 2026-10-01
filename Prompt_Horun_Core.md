@@ -59,8 +59,19 @@ Todo usuário autenticado vê a lista de módulos cadastrados e seu status (oper
 
 ## 6. Papéis e permissões
 
-- **Administrador máximo** (`User.is_super_admin`) — papel do Core, diferente do `admin` interno de cada módulo. Cadastra módulos, usuários, equipamentos, grupos e concede acesso.
-- **Administrador original** (`User.is_protected`) — só a conta de bootstrap, um nível acima do administrador máximo (nunca uma conta promovida depois). Hoje só ela vê a caixa de sugestões (dependência `ProtectedUser` em `deps.py`) e não pode ser excluída/rebaixada.
+**Níveis de permissão por posição** (decisão do usuário, 2026-10-01). O nível vem **só da posição** da pessoa (`User.position`), atribuída por um coordenador em Administração → Usuários. Não existe mais "tornar admin". Regra única em `backend/app/core/permissions.py`; as rotas usam as dependências de `deps.py` (`CoordinatorUser`, `ModuleAdminUser`, `EquipmentManagerUser`, `ModeratorUser`); o frontend recebe o resultado pronto em `user.can`.
+
+| Nível | Quem | Pode |
+|---|---|---|
+| 1 · Administrador máximo | **só a conta original** (`User.is_protected`, nunca excluída nem rebaixada) | tudo, inclusive **cadastro e integração de módulos** (URLs internas, ícone, créditos) e a caixa de sugestões |
+| 2 · Coordenador(a) | posição Coordenador(a) | tudo menos cadastro/integração de módulos: usuários e posições, permissões de módulo (inclusive público/oculto), grupos, equipamentos, moderação, telefones no diretório, acesso a todo módulo |
+| 3 · Pesquisador(a) | posição Pesquisador(a) | moderação: fixar/editar/remover avisos e respostas de outros, eventos do laboratório, mover/editar reservas de outros, editar e **conferir** a ficha RUE. Não cria usuários, não dá permissões, não mexe em módulos nem em equipamentos |
+| 4 · Técnico(a) | posição Técnico(a) | o mesmo do pesquisador **+ criar/editar equipamentos, áreas e tipos** |
+| 5 · Iniciação Científica | posição IC **ou sem posição** (o mais restrito, de propósito) | uso básico: publicar, reservar, registrar uso, editar o que é seu |
+
+- **Migração**: quem tinha sido promovido a administrador máximo (`is_super_admin` sem ser a conta original) virou Coordenador(a), e a flag foi zerada (`migrate_promoted_admins_to_coordinators` em `db/session.py`, idempotente). `is_super_admin` hoje é legado: só fica verdadeiro na conta original e não decide nada.
+- **Grupos**: o admin interno de um grupo tem que ter nível 1 a 4 (quem já modera); criar/excluir grupo e trocar o admin interno é de coordenador.
+- **Para os módulos**: `X-Horun-Role` continua `admin` (nível 1-2) ou `user`; os cabeçalhos novos `X-Horun-Level` (1-5) e `X-Horun-Level-Name` (`admin`/`coordenador`/`pesquisador`/`tecnico`/`ic`) são opcionais (`Prompt_Horun_Modulo.md`, seção 5).
 - **Acesso a módulo**: tabela `user_module_access` (usuário, módulo, concedido por, quando). Binário — o Core decide **se** a pessoa entra; o módulo decide **o que** ela faz lá dentro.
 - `Module.public` = todo autenticado tem acesso; `Module.unlisted` = some da listagem pra quem não tem acesso. As concessões individuais continuam guardadas por baixo — desligar o toggle volta a valer o que já existia.
 
@@ -76,11 +87,11 @@ Pedido do usuário: o Horun (Core e/ou módulos) deve conseguir gravar em compar
 
 ### 8.1 O que existe hoje (por área)
 
-Backend com **213 testes automatizados** (`backend/tests/`), todos passando; cada entrega também validada no navegador.
+Backend com **236 testes automatizados** (`backend/tests/`), todos passando; cada entrega também validada no navegador.
 
 - **Gateway e módulos** — login com sessão em cookie; `Module` + `UserModuleAccess`; dashboard agregando `/health`. `/m/{id}/*` (`routes_proxy.py`) decide pelo primeiro segmento: `api/...` → `Module.internal_base_url`; qualquer outra coisa → `Module.internal_frontend_url` (estáticos da SPA) — checando permissão nos dois casos e injetando os cabeçalhos de identidade. A barra lateral lista os módulos com acesso e `embeddable=true` como `<a>` (cada módulo é uma SPA própria, carregamento de página real). **Plugados de verdade**: RE7S (com o Agente Horun no PC do equipamento — ver `Prompt_refinado.md` do RE7S, seções 14-18), Amostras e Reagentes.
-- **Usuários e perfil** — `username` é slug obrigatório (`^[a-zA-Z0-9._-]{2,}$`, senão a `@menção` quebra no espaço); admin renomeia pela tabela. `position`/`qualification` de listas fixas (`POSITIONS`/`QUALIFICATIONS` em `models.py`, com marcador "(a)"), só o admin atribui. **Conta sem senha**: admin cria sem senha → `setup_code` (6 hex) mostrado uma vez → "Primeiro acesso" na tela de login (`POST /auth/set-password`); login numa conta sem senha retorna `428`; `POST /users/{id}/regenerate-setup-code` zera a senha. `POST /auth/change-password` troca a qualquer momento. Autoatendimento em `/perfil` (`PATCH /auth/me`): nome, e-mail, telefone, nome de exibição, data de nascimento (3 inteiros opcionais, ano opcional), foto (bytes no banco, ≤2 MB, `GET /users/{id}/photo`), preferência de e-mail. Modal de onboarding no 1º acesso (`User.onboarded`).
-- **Colaboradores** (`/colaboradores`, `GET /users/directory`) — foto, nome, cargo, qualificação, e-mail públicos; **telefone só pro administrador máximo**; `username`/papel nunca expostos.
+- **Usuários e perfil** — `username` é slug obrigatório (`^[a-zA-Z0-9._-]{2,}$`, senão a `@menção` quebra no espaço); admin renomeia pela tabela. `position`/`qualification` de listas fixas (`POSITIONS`/`QUALIFICATIONS` em `models.py`, com marcador "(a)"), só coordenadores atribuem — **a posição define o nível de permissão** (seção 6). **Conta sem senha**: admin cria sem senha → `setup_code` (6 hex) mostrado uma vez → "Primeiro acesso" na tela de login (`POST /auth/set-password`); login numa conta sem senha retorna `428`; `POST /users/{id}/regenerate-setup-code` zera a senha. `POST /auth/change-password` troca a qualquer momento. Autoatendimento em `/perfil` (`PATCH /auth/me`): nome, e-mail, telefone, nome de exibição, data de nascimento (3 inteiros opcionais, ano opcional), foto (bytes no banco, ≤2 MB, `GET /users/{id}/photo`), preferência de e-mail. Modal de onboarding no 1º acesso (`User.onboarded`).
+- **Colaboradores** (`/colaboradores`, `GET /users/directory`) — foto, nome, cargo, qualificação, e-mail públicos; **telefone só para coordenadores** (nível ≤ 2); `username`/papel nunca expostos.
 - **Mural** (`/`) — avisos com anexo opcional (1 imagem/PDF ≤5 MB, `POST /posts` multipart); admin fixa; respostas em um nível; `@menção` com autocompletar (`GET /users/mentionable`); autor, admin máximo ou admin interno do grupo edita/remove. Escopo laboratório ou grupo (`Post.group_id`).
 - **Notificações** — `Notification` (`mention`/`reply`/`birthday_week`), sininho com polling de 45 s; abrir o painel marca tudo como lido. Nunca notifica a si mesmo; menção vence resposta.
 - **E-mail** — SMTP direto do backend (`app/core/email.py`, em thread; Gmail dedicado + senha de app). Inerte sem `SMTP_HOST/PORT/USER/PASS/FROM` no `.env`. Dispara em menção, resposta e digest semanal; `User.email_notifications` desliga por pessoa.
@@ -103,6 +114,7 @@ Backend com **213 testes automatizados** (`backend/tests/`), todos passando; cad
 7. **Tailwind v4 não escaneia `node_modules`** — por isso `@source "./*.tsx";` em `design-system/src/tokens.css`.
 8. **`<img>` de rota autenticada** em dev cross-origin precisa de `crossOrigin="use-credentials"`; troca de foto usa cache-buster `?v=` (`userVersion` no `AuthContext`).
 9. **Caddy catch-all `:443`** (sem hostname) precisa de `tls internal { on_demand }`, senão todo handshake falha com `internal_error`.
+10. **O proxy nunca repassa identidade vinda do navegador** (`build_forward_headers` em `routes_proxy.py`). Até 2026-10-01 ele copiava os cabeçalhos do cliente e só depois acrescentava os `X-Horun-*` — o Starlette entrega os nomes em minúsculas, o Core escrevia com outra caixa, e o módulo recebia **os dois**, lendo o forjado: qualquer usuário logado virava admin ou outra pessoa dentro de qualquer módulo. Hoje os nomes de identidade são reservados (descartados na entrada, sem diferenciar maiúsculas) e o cookie de sessão do Core não segue para o módulo. Teste de regressão em `tests/test_proxy.py`. Todo cabeçalho de identidade novo entra em `RESERVED_IDENTITY_HEADERS`.
 
 ### 8.3 Ainda não implementado
 
@@ -115,6 +127,15 @@ Backend com **213 testes automatizados** (`backend/tests/`), todos passando; cad
 7. **Crachá automático** a partir do modelo NQTR (`Modelo 2.ai`): frente com foto circular, nome, cargo/qualificação, QR code (proposto: vCard); verso com contato, emergência, alergias, tipo sanguíneo. Depende do item 6.
 8. **Anexos em respostas do Mural** — baixa prioridade.
 9. **Equipamentos, Fase C** — sincronizar a ficha RUE do Core com o histórico interno de cada módulo; não desenhado.
+10. **Achados da revisão de 2026-10-01 ainda abertos** (o mais grave, identidade forjada pelo proxy, já foi corrigido — lição 10):
+    - código de primeiro acesso (6 hex) e login sem limite de tentativas; o `428` revela quais contas estão esperando código;
+    - trocar a senha ou "gerar novo acesso" não derruba sessões já abertas (falta `session_version` no token);
+    - cookie de sessão sem `secure`, Caddy sem cabeçalhos de segurança (`nosniff`, `X-Frame-Options`), sem checagem de `Origin` no `POST /posts` (multipart);
+    - **nenhum backup do Postgres** (fotos e anexos também estão no banco);
+    - anexo de aviso de grupo baixável por quem não é do grupo (`GET /posts/{id}/attachment`);
+    - excluir módulo com permissões/créditos/equipamento vinculado dá 500 no Postgres;
+    - a busca global mostra módulos `unlisted`; o dashboard checa a saúde dos módulos em série (bloqueia o servidor com módulos fora do ar);
+    - `@nome.` com ponto final não notifica; ~25 `catch` silenciosos no frontend (contra a lição 5).
 
 ### 8.4 Descartado (não repropor sem motivo novo — usuário, 2026-09-16)
 

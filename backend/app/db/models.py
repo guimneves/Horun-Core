@@ -1,12 +1,12 @@
 """Modelos de banco de dados do Horun Core (ver Prompt_Horun_Core.md).
 
-- **User**: conta de plataforma. `is_super_admin` é o "administrador
-  máximo" da seção 6 do Prompt_Horun_Core.md — diferente do papel `admin`
-  que cada módulo tem internamente (ex. RE7S). `is_protected` segue o
-  mesmo padrão do RE7S: a conta de bootstrap nunca pode ser excluída,
-  rebaixada nem ter usuário/senha alterados, para sempre haver um acesso
-  de backup garantido. Importação de usuários do AD (seção 4) ainda não
-  implementada — hoje todo usuário é criado localmente pelo super-admin.
+- **User**: conta de plataforma. O nível de permissão (1-5, seção 6 do
+  Prompt_Horun_Core.md) vem da `position` — regra em core/permissions.py,
+  diferente do papel `admin` que cada módulo tem internamente (ex. RE7S).
+  `is_protected` (nível 1) segue o mesmo padrão do RE7S: a conta de
+  bootstrap nunca pode ser excluída, rebaixada nem ter usuário/senha
+  alterados, para sempre haver um acesso de backup garantido. Todo usuário
+  é criado localmente por um coordenador (importação do AD descartada).
 - **Module**: cadastro de um módulo (RE7S, Leco, ...) — `id` é o slug
   usado tanto no `MODULE.md` do módulo quanto na rota de proxy
   (`/m/{id}/...`). `internal_base_url` só precisa ser alcançável dentro da
@@ -92,6 +92,11 @@ class User(SQLModel, table=True):
     # pra não pesar toda lista/login com o conteúdo da imagem.
     photo: Optional[bytes] = None
     photo_content_type: Optional[str] = None
+    # LEGADO: antes era o "administrador máximo". Hoje não decide permissão
+    # nenhuma (o nível vem da posição — core/permissions.py); só existe para
+    # a migração que converte promovidos em Coordenador(a)
+    # (session.migrate_promoted_admins_to_coordinators). Fica True só na
+    # conta original.
     is_super_admin: bool = Field(default=False)
     # Conta de bootstrap protegida — mesmo raciocínio do RE7S (ver
     # app/api/routes_auth.py): sempre precisa existir um acesso de backup.

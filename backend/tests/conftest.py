@@ -44,7 +44,12 @@ def client(app_with_overrides):
         yield c
 
 
-def _create_user(db_engine, username: str, password: str, is_super_admin: bool = False, is_protected: bool = False) -> User:
+def _create_user(
+    db_engine, username: str, password: str, is_super_admin: bool = False, is_protected: bool = False, position: str = ""
+) -> User:
+    # O nível de permissão vem da posição (app/core/permissions.py); sem
+    # posição = nível 5 (IC). `is_super_admin` só importa junto com
+    # is_protected (a conta original, nível 1).
     with Session(db_engine) as s:
         user = User(
             username=username,
@@ -52,6 +57,7 @@ def _create_user(db_engine, username: str, password: str, is_super_admin: bool =
             display_name=username,
             is_super_admin=is_super_admin,
             is_protected=is_protected,
+            position=position,
         )
         s.add(user)
         s.commit()
@@ -100,7 +106,9 @@ def user_b_client(app_with_overrides, user_b):
 
 @pytest.fixture()
 def admin2(db_engine) -> User:
-    return _create_user(db_engine, "admin2", "senha2", is_super_admin=True)
+    # um segundo "admin" = Coordenador(a) (nível 2), como a migração faz com
+    # quem tinha sido promovido a administrador máximo
+    return _create_user(db_engine, "admin2", "senha2", position="Coordenador(a)")
 
 
 @pytest.fixture()

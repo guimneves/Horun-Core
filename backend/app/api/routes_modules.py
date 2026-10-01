@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import select
 
-from app.api.deps import CurrentUser, SessionDep, SuperAdminUser
+from app.api.deps import CoordinatorUser, CurrentUser, ModuleAdminUser, SessionDep
+from app.core.permissions import is_coordinator_or_above
 from app.core.config import settings
 from app.db.models import Module, ModuleContributor, User, UserModuleAccess
 
@@ -72,7 +73,7 @@ def _out(m: Module) -> ModuleOut:
 
 
 @router.post("/modules", response_model=ModuleOut)
-def create_module(payload: ModuleIn, _admin: SuperAdminUser, session: SessionDep):
+def create_module(payload: ModuleIn, _admin: ModuleAdminUser, session: SessionDep):
     existing = session.get(Module, payload.id)
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um módulo com esse id")
@@ -84,13 +85,13 @@ def create_module(payload: ModuleIn, _admin: SuperAdminUser, session: SessionDep
 
 
 @router.get("/modules", response_model=list[ModuleOut])
-def list_modules(_admin: SuperAdminUser, session: SessionDep):
+def list_modules(_admin: CoordinatorUser, session: SessionDep):
     modules = session.exec(select(Module)).all()
     return [_out(m) for m in modules]
 
 
 @router.patch("/modules/{module_id}", response_model=ModuleOut)
-def update_module(module_id: str, payload: ModuleIn, _admin: SuperAdminUser, session: SessionDep):
+def update_module(module_id: str, payload: ModuleIn, _admin: ModuleAdminUser, session: SessionDep):
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
@@ -105,7 +106,7 @@ def update_module(module_id: str, payload: ModuleIn, _admin: SuperAdminUser, ses
 
 
 @router.delete("/modules/{module_id}")
-def delete_module(module_id: str, _admin: SuperAdminUser, session: SessionDep):
+def delete_module(module_id: str, _admin: ModuleAdminUser, session: SessionDep):
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
@@ -137,7 +138,7 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
     modules = session.exec(select(Module)).all()
 
     access_ids: set[str] = set()
-    if not user.is_super_admin:
+    if not is_coordinator_or_above(user):
         grants = session.exec(
             select(UserModuleAccess).where(UserModuleAccess.user_id == user.id)
         ).all()
@@ -145,7 +146,7 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
 
     out: list[ModuleStatusOut] = []
     for m in modules:
-        has_access = user.is_super_admin or bool(m.public) or m.id in access_ids
+        has_access = is_coordinator_or_above(user) or bool(m.public) or m.id in access_ids
         if m.unlisted and not has_access:
             continue
         online = await _check_module_online(m)
@@ -177,7 +178,7 @@ class ModulePublicIn(BaseModel):
 
 
 @router.patch("/modules/{module_id}/public", response_model=ModuleOut)
-def set_module_public(module_id: str, payload: ModulePublicIn, _admin: SuperAdminUser, session: SessionDep):
+def set_module_public(module_id: str, payload: ModulePublicIn, _admin: CoordinatorUser, session: SessionDep):
     """Liga/desliga o acesso pra todo mundo de uma vez — pedido do
     usuário: alguns módulos não precisam de concessão usuário a usuário,
     todo colaborador do laboratório deve ter acesso. As concessões
@@ -198,7 +199,7 @@ class ModuleUnlistedIn(BaseModel):
 
 
 @router.patch("/modules/{module_id}/unlisted", response_model=ModuleOut)
-def set_module_unlisted(module_id: str, payload: ModuleUnlistedIn, _admin: SuperAdminUser, session: SessionDep):
+def set_module_unlisted(module_id: str, payload: ModuleUnlistedIn, _admin: CoordinatorUser, session: SessionDep):
     """Liga/desliga a listagem geral (catálogo de módulos, barra lateral)
     pra quem não tem acesso — pedido do usuário: tirar um módulo da
     visualização de todos, mantendo visível pra quem já pode usá-lo. Não
@@ -214,7 +215,7 @@ def set_module_unlisted(module_id: str, payload: ModuleUnlistedIn, _admin: Super
 
 
 @router.get("/modules/{module_id}/access", response_model=list[AccessOut])
-def list_module_access(module_id: str, _admin: SuperAdminUser, session: SessionDep):
+def list_module_access(module_id: str, _admin: CoordinatorUser, session: SessionDep):
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
@@ -229,7 +230,7 @@ def list_module_access(module_id: str, _admin: SuperAdminUser, session: SessionD
 
 @router.post("/modules/{module_id}/access")
 def grant_module_access(
-    module_id: str, payload: AccessGrantRequest, admin: SuperAdminUser, session: SessionDep
+    module_id: str, payload: AccessGrantRequest, admin: CoordinatorUser, session: SessionDep
 ):
     module = session.get(Module, module_id)
     if module is None:
@@ -253,7 +254,7 @@ def grant_module_access(
 
 
 @router.delete("/modules/{module_id}/access/{user_id}")
-def revoke_module_access(module_id: str, user_id: int, _admin: SuperAdminUser, session: SessionDep):
+def revoke_module_access(module_id: str, user_id: int, _admin: CoordinatorUser, session: SessionDep):
     grant = session.exec(
         select(UserModuleAccess)
         .where(UserModuleAccess.module_id == module_id)
@@ -299,7 +300,7 @@ def list_module_contributors(module_id: str, _user: CurrentUser, session: Sessio
 
 
 @router.post("/modules/{module_id}/contributors", response_model=ContributorOut)
-def add_module_contributor(module_id: str, payload: ContributorIn, _admin: SuperAdminUser, session: SessionDep):
+def add_module_contributor(module_id: str, payload: ContributorIn, _admin: ModuleAdminUser, session: SessionDep):
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
@@ -321,7 +322,7 @@ def add_module_contributor(module_id: str, payload: ContributorIn, _admin: Super
 
 
 @router.delete("/modules/{module_id}/contributors/{user_id}")
-def remove_module_contributor(module_id: str, user_id: int, _admin: SuperAdminUser, session: SessionDep):
+def remove_module_contributor(module_id: str, user_id: int, _admin: ModuleAdminUser, session: SessionDep):
     row = session.exec(
         select(ModuleContributor)
         .where(ModuleContributor.module_id == module_id)
