@@ -439,6 +439,7 @@ function ModulesWidget() {
   const [modules, setModules] = useState<ModuleStatus[]>([])
 
   useEffect(() => {
+    // widget lateral, só atalho: se falhar, some (a página Módulos mostra o erro)
     api.dashboardModules().then(setModules).catch(() => {})
   }, [])
 
@@ -497,6 +498,7 @@ function AgendaWidget() {
             .map((r) => ({ reservation: r, equipment: byId.get(r.equipment_id) })),
         )
       })
+      // widget lateral, só resumo: se falhar, some (a Agenda mostra o erro)
       .catch(() => {})
   }, [])
 
@@ -549,6 +551,7 @@ function BirthdaysWidget() {
     const end = new Date()
     end.setDate(end.getDate() + 45)
     const iso = (d: Date) => toLocalIso(d).slice(0, 10)
+    // widget lateral, só lembrete: se falhar, some
     api.listBirthdays({ start: iso(start), end: iso(end) }).then(setItems).catch(() => {})
   }, [])
 
@@ -578,6 +581,7 @@ export function MuralPage() {
   const [posts, setPosts] = useState<Post[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [myGroups, setMyGroups] = useState<Group[]>([])
+  const [groupsError, setGroupsError] = useState<string | null>(null)
   // null = mural do laboratório; número = id do grupo
   const [scope, setScope] = useState<number | null>(() => {
     const g = new URLSearchParams(window.location.search).get('g')
@@ -585,7 +589,10 @@ export function MuralPage() {
   })
 
   useEffect(() => {
-    api.listGroups().then((gs) => setMyGroups(gs.filter((g) => g.is_member))).catch(() => {})
+    api
+      .listGroups()
+      .then((gs) => setMyGroups(gs.filter((g) => g.is_member)))
+      .catch((err) => setGroupsError(err instanceof ApiError ? err.message : 'Não foi possível carregar seus grupos.'))
   }, [])
 
   function reload() {
@@ -611,6 +618,7 @@ export function MuralPage() {
             ))}
           </div>
         )}
+        {groupsError && <p className="text-[13px]" style={{ color: '#d43b3b' }}>{groupsError}</p>}
         <Composer groupId={scope} onPosted={reload} />
         {error && <p style={{ color: '#d43b3b' }}>{error}</p>}
         {!posts && !error && <p style={{ color: 'var(--color-text-muted)' }}>Carregando…</p>}

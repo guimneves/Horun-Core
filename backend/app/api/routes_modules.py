@@ -5,17 +5,39 @@ permissão (seção 5: "todo usuário vê quais módulos estão operacionais")."
 
 from __future__ import annotations
 
+import asyncio
+import re
+
 import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.api.deps import CoordinatorUser, CurrentUser, ModuleAdminUser, SessionDep
 from app.core.permissions import is_coordinator_or_above
 from app.core.config import settings
-from app.db.models import Module, ModuleContributor, User, UserModuleAccess
+from app.db.models import Equipment, Module, ModuleContributor, User, UserModuleAccess
 
 router = APIRouter(tags=["modules"])
+
+# `id` vai literalmente na URL (/m/{id}/, /api/modules/{id}/...) e é a base
+# da SPA do módulo — mesma regra do id de equipamento (_validate_equipment_id
+# em routes_equipment.py, lição 4 do Prompt_Horun_Core.md), com um detalhe a
+# mais: tem que começar por letra ou número, pra "..", ".x" etc. não virarem
+# caminho relativo dentro de /m/. Só vale na criação — módulos já cadastrados
+# (re7s, amostras, reagentes) continuam funcionando como estão.
+_MODULE_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]+$")
+
+
+def _validate_module_id(value: str) -> str:
+    value = (value or "").strip()
+    if not _MODULE_ID_RE.fullmatch(value):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Id do módulo só pode ter letras sem acento, números, ponto, hífen e sublinhado — "
+            "sem espaços, começando por letra ou número, com pelo menos 2 caracteres (ex.: re7s).",
+        )
+    return value
 
 
 # Codinomes internos nunca entram nas respostas da API nem em tela
@@ -74,10 +96,11 @@ def _out(m: Module) -> ModuleOut:
 
 @router.post("/modules", response_model=ModuleOut)
 def create_module(payload: ModuleIn, _admin: ModuleAdminUser, session: SessionDep):
-    existing = session.get(Module, payload.id)
+    module_id = _validate_module_id(payload.id)
+    existing = session.get(Module, module_id)
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um módulo com esse id")
-    module = Module(**payload.model_dump())
+    module = Module(**{**payload.model_dump(), "id": module_id})
     session.add(module)
     session.commit()
     session.refresh(module)
@@ -107,12 +130,49 @@ def update_module(module_id: str, payload: ModuleIn, _admin: ModuleAdminUser, se
 
 @router.delete("/modules/{module_id}")
 def delete_module(module_id: str, _admin: ModuleAdminUser, session: SessionDep):
+    """Exclui o módulo cuidando de quem aponta pra ele — no Postgres a
+    chave estrangeira recusaria (500) e no SQLite ficariam órfãos (lição 6):
+    - permissões (`UserModuleAccess`) e créditos (`ModuleContributor`) são
+      apagados: sem o módulo não significam nada;
+    - equipamento vinculado (`Equipment.module_id`) é **desvinculado**, não
+      apagado nem bloqueia a exclusão — o equipamento, suas reservas e a
+      ficha RUE continuam; só perde o badge de status. Mesmo espírito de
+      excluir uma área (routes_equipment.py). Vincular de novo é na tela do
+      equipamento."""
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
+    for grant in session.exec(select(UserModuleAccess).where(UserModuleAccess.module_id == module_id)).all():
+        session.delete(grant)
+    for row in session.exec(select(ModuleContributor).where(ModuleContributor.module_id == module_id)).all():
+        session.delete(row)
+    for eq in session.exec(select(Equipment).where(Equipment.module_id == module_id)).all():
+        eq.module_id = None
+        session.add(eq)
+    # flush antes do delete: no Postgres os dependentes têm que sair antes
+    # da linha do módulo, senão a FK recusa no commit
+    session.flush()
     session.delete(module)
     session.commit()
     return {"ok": True}
+
+
+def catalog_visible_modules(session: Session, user: User, modules: list[Module]) -> list[tuple[Module, bool]]:
+    """Regra única do catálogo (seção 6 do Prompt_Horun_Core.md), usada pelo
+    dashboard e pela busca global: devolve (módulo, has_access) só dos
+    módulos que a pessoa pode ver — `unlisted` some pra quem não tem acesso."""
+    access_ids: set[str] = set()
+    if not is_coordinator_or_above(user):
+        grants = session.exec(select(UserModuleAccess).where(UserModuleAccess.user_id == user.id)).all()
+        access_ids = {g.module_id for g in grants}
+
+    out: list[tuple[Module, bool]] = []
+    for m in modules:
+        has_access = is_coordinator_or_above(user) or bool(m.public) or m.id in access_ids
+        if m.unlisted and not has_access:
+            continue
+        out.append((m, has_access))
+    return out
 
 
 async def _check_module_online(module: Module) -> bool:
@@ -128,6 +188,18 @@ async def _check_module_online(module: Module) -> bool:
         return False
 
 
+async def _online_with_deadline(module: Module) -> bool:
+    """Teto duro por módulo: o timeout do httpx vale por fase (conectar,
+    ler...), então um módulo "meio vivo" podia passar dele. Estourou ou deu
+    qualquer erro inesperado → offline, nunca 500 no dashboard."""
+    try:
+        return await asyncio.wait_for(
+            _check_module_online(module), timeout=settings.module_health_timeout_seconds + 0.5
+        )
+    except Exception:
+        return False
+
+
 @router.get("/dashboard/modules", response_model=list[ModuleStatusOut])
 async def dashboard_modules(user: CurrentUser, session: SessionDep):
     """Todo usuário autenticado vê todo módulo cadastrado e seu status —
@@ -135,21 +207,15 @@ async def dashboard_modules(user: CurrentUser, session: SessionDep):
     Exceção: um módulo `unlisted` some da lista pra quem não tem acesso —
     pedido do usuário pra tirar um módulo da visualização geral, mantendo
     quem já tem permissão vendo normalmente."""
-    modules = session.exec(select(Module)).all()
+    visible = catalog_visible_modules(session, user, session.exec(select(Module)).all())
 
-    access_ids: set[str] = set()
-    if not is_coordinator_or_above(user):
-        grants = session.exec(
-            select(UserModuleAccess).where(UserModuleAccess.user_id == user.id)
-        ).all()
-        access_ids = {g.module_id for g in grants}
+    # Checagens em paralelo, cada uma com o timeout curto de
+    # `module_health_timeout_seconds`: N módulos fora do ar custam ~um
+    # timeout, não N (antes era em série e travava a página).
+    statuses = await asyncio.gather(*(_online_with_deadline(m) for m, _ in visible))
 
     out: list[ModuleStatusOut] = []
-    for m in modules:
-        has_access = is_coordinator_or_above(user) or bool(m.public) or m.id in access_ids
-        if m.unlisted and not has_access:
-            continue
-        online = await _check_module_online(m)
+    for (m, has_access), online in zip(visible, statuses):
         out.append(
             ModuleStatusOut(
                 id=m.id,

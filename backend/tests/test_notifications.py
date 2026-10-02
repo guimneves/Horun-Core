@@ -1,3 +1,6 @@
+from tests.conftest import _create_user, _login
+
+
 def _count(client):
     return client.get("/notifications/unread-count").json()["count"]
 
@@ -79,3 +82,27 @@ def test_notifications_require_auth(client):
     assert client.get("/notifications").status_code == 401
     assert client.get("/notifications/unread-count").status_code == 401
     assert client.post("/notifications/mark-read").status_code == 401
+
+
+def test_mention_followed_by_punctuation_notifies(user_a_client, user_b_client):
+    # "@usuario-b." no fim da frase não notificava: o ponto entrava no
+    # username (Prompt_Horun_Core.md, 8.3 item 10).
+    for text in ("fala com @usuario-b.", "@usuario-b, olha", "viu @usuario-b?", "(cc @usuario-b)", "@usuario-b...!"):
+        user_a_client.post("/posts", data={"content": text})
+    assert len(user_b_client.get("/notifications").json()) == 5
+
+
+def test_mention_of_username_with_inner_dot(db_engine, app_with_overrides, user_a_client):
+    _create_user(db_engine, "joao.silva", "senha-j")
+    joao = _login(app_with_overrides, "joao.silva", "senha-j")
+    user_a_client.post("/posts", data={"content": "obrigado @joao.silva."})
+    rows = joao.get("/notifications").json()
+    assert len(rows) == 1 and rows[0]["kind"] == "mention"
+
+
+def test_mention_of_username_ending_with_dot_still_exact(db_engine, app_with_overrides, user_a_client):
+    # o slug de username aceita ponto no fim; se existir exatamente, vale ele
+    _create_user(db_engine, "ana.", "senha-ana")
+    ana = _login(app_with_overrides, "ana.", "senha-ana")
+    user_a_client.post("/posts", data={"content": "@ana. confere"})
+    assert len(ana.get("/notifications").json()) == 1

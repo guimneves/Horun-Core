@@ -33,7 +33,7 @@ function ModuleStatusBadge({ module }: { module: ModuleStatus }) {
       onClick={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        if (clickable) window.location.href = `/m/${module.id}/`
+        if (clickable) window.location.href = `/m/${encodeURIComponent(module.id)}/`
       }}
       className="absolute right-2 top-2 h-3.5 w-3.5 rounded-full"
       style={{
@@ -66,6 +66,8 @@ export function EquipmentPage() {
       .listEquipment()
       .then(setEquipment)
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os equipamentos.'))
+    // auxiliares (filtros e badge de status do módulo): se falharem, a lista
+    // de equipamentos — que tem erro visível acima — continua utilizável
     api.listEquipmentAreas().then(setAreas).catch(() => {})
     api.listEquipmentTypes().then(setTypes).catch(() => {})
     api.dashboardModules().then(setModules).catch(() => {})

@@ -28,8 +28,28 @@ _ALLOWED_ATTACHMENT_TYPES = {
 }
 
 # Mesma forma que o frontend reconhece/destaca (MentionTextarea.tsx):
-# "@" seguido de letras, números, ponto ou hífen.
+# "@" seguido de letras, números, ponto ou hífen. O ponto pode estar no
+# meio do username (`joao.silva`), então "@joao." captura "joao." —
+# _mentioned_users tira o ponto final de frase (vírgula, "!", "?", ")"
+# etc. já ficam de fora da classe).
 _MENTION_RE = re.compile(r"@([\w.-]+)")
+
+
+def _mentioned_users(session: Session, content: str) -> list[User]:
+    """Usuários mencionados no texto. Para cada "@algo." com ponto(s) no
+    fim, vale o username exato se existir (o slug aceita ponto no fim);
+    senão, o mesmo sem os pontos finais — "fala com @joao." menciona joao."""
+    raw = set(_MENTION_RE.findall(content))
+    if not raw:
+        return []
+    candidates = raw | {r.rstrip(".") for r in raw}
+    found = {u.username: u for u in session.exec(select(User).where(User.username.in_(list(candidates)))).all()}
+    out: dict[int, User] = {}
+    for r in raw:
+        u = found.get(r) or found.get(r.rstrip("."))
+        if u is not None:
+            out[u.id] = u
+    return list(out.values())
 
 
 def _mural_link(post: Post) -> str:
@@ -45,12 +65,9 @@ def _fan_out_notifications(
     alguém de um aviso que ele não pode ver). Não commita."""
     recipients: dict[int, str] = {}  # user_id -> kind ("mention" vence "reply")
 
-    usernames = set(_MENTION_RE.findall(content))
-    if usernames:
-        mentioned = session.exec(select(User).where(User.username.in_(list(usernames)))).all()
-        for u in mentioned:
-            if u.id != actor.id:
-                recipients[u.id] = "mention"
+    for u in _mentioned_users(session, content):
+        if u.id != actor.id:
+            recipients[u.id] = "mention"
 
     if is_reply and post.author_id != actor.id:
         recipients.setdefault(post.author_id, "reply")
@@ -277,10 +294,16 @@ async def create_post(
 
 
 @router.get("/posts/{post_id}/attachment")
-def get_post_attachment(post_id: int, _user: CurrentUser, session: SessionDep):
+def get_post_attachment(post_id: int, user: CurrentUser, session: SessionDep):
+    """Anexo de aviso de grupo segue a mesma regra do mural do grupo
+    (`_require_group_visible`: membro ou coordenador) — antes qualquer
+    autenticado baixava pelo id. O autor sempre baixa o que ele mesmo
+    enviou, mesmo que tenha saído do grupo."""
     post = session.get(Post, post_id)
     if post is None or post.attachment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sem anexo")
+    if post.group_id is not None and post.author_id != user.id:
+        _require_group_visible(session, post.group_id, user)
     headers = {}
     if post.attachment_filename:
         # inline: imagem abre na aba, PDF idem — o nome fica pro "salvar como"

@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
-import { api, type ModuleContributor, type ModuleStatus } from '../api/client'
+import { api, ApiError, type ModuleContributor, type ModuleStatus } from '../api/client'
 import { Avatar } from '../components/Avatar'
 import horunIcon from '../assets/horun-icon.png'
 import nqtrLogo from '../assets/nqtr-logo.png'
 
 function ModuleCredits({ module }: { module: ModuleStatus }) {
   const [contributors, setContributors] = useState<ModuleContributor[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.listModuleContributors(module.id).then(setContributors).catch(() => {})
+    api
+      .listModuleContributors(module.id)
+      .then(setContributors)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os créditos.'))
   }, [module.id])
 
   return (
@@ -22,7 +26,9 @@ function ModuleCredits({ module }: { module: ModuleStatus }) {
           {module.description}
         </p>
       )}
-      {contributors.length === 0 ? (
+      {error ? (
+        <p className="text-xs" style={{ color: '#d43b3b' }}>{error}</p>
+      ) : contributors.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Sem contribuidores cadastrados.</p>
       ) : (
         <div className="flex flex-wrap gap-3">
@@ -40,9 +46,13 @@ function ModuleCredits({ module }: { module: ModuleStatus }) {
 
 export function SobrePage() {
   const [modules, setModules] = useState<ModuleStatus[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.dashboardModules().then(setModules).catch(() => {})
+    api
+      .dashboardModules()
+      .then(setModules)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os módulos.'))
   }, [])
 
   return (
@@ -91,7 +101,8 @@ export function SobrePage() {
           {modules.map((m) => (
             <ModuleCredits key={m.id} module={m} />
           ))}
-          {modules.length === 0 && (
+          {error && <p className="text-sm" style={{ color: '#d43b3b' }}>{error}</p>}
+          {!error && modules.length === 0 && (
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Nenhum módulo cadastrado ainda.</p>
           )}
         </div>

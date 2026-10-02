@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type Notification } from '../api/client'
+import { api, ApiError, type Notification } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { BellIcon } from '../icons'
 import { timeAgo } from '../lib/datetime'
@@ -16,12 +16,15 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false)
   const [unread, setUnread] = useState(0)
   const [items, setItems] = useState<Notification[] | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
 
   const refreshCount = useCallback(() => {
     if (!user) return
     api
       .unreadNotificationCount()
       .then((r) => setUnread(r.count))
+      // polling de fundo: uma falha só deixa o número antigo; a próxima
+      // rodada (POLL_MS) tenta de novo, e abrir o painel mostra o erro
       .catch(() => {})
   }, [user])
 
@@ -52,13 +55,15 @@ export function NotificationsBell() {
     setOpen(next)
     if (next) {
       try {
+        setListError(null)
         const list = await api.listNotifications()
         setItems(list)
         if (list.some((n) => !n.read)) {
           await api.markNotificationsRead()
           setUnread(0)
         }
-      } catch {
+      } catch (err) {
+        setListError(err instanceof ApiError ? err.message : 'Não foi possível carregar as notificações.')
         setItems([])
       }
     }
@@ -108,7 +113,12 @@ export function NotificationsBell() {
                 Carregando…
               </div>
             )}
-            {items !== null && items.length === 0 && (
+            {listError && (
+              <div className="px-4 py-6 text-center text-[13px]" style={{ color: '#d43b3b' }}>
+                {listError}
+              </div>
+            )}
+            {!listError && items !== null && items.length === 0 && (
               <div className="px-4 py-8 text-center text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
                 Nenhuma notificação ainda.
               </div>

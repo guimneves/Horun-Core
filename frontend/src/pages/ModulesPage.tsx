@@ -88,7 +88,7 @@ export function ModulesPage() {
               {m.has_access ? (
                 m.embeddable ? (
                   <a
-                    href={`/m/${m.id}/`}
+                    href={`/m/${encodeURIComponent(m.id)}/`}
                     className="inline-block rounded-md px-3 py-1.5 text-sm font-medium"
                     style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
                   >

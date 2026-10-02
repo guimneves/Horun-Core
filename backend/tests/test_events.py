@@ -93,3 +93,27 @@ def test_admin_edits_and_deletes_event(super_admin_client, user_a_client):
     assert user_a_client.delete(f"/events/{eid}").status_code == 403
     assert super_admin_client.delete(f"/events/{eid}").status_code == 200
     assert super_admin_client.get("/events").json() == []
+
+
+def test_event_description_round_trip(super_admin_client, user_a_client):
+    # AgendaPage passou a mandar/mostrar a descrição (8.3 item 5)
+    r = super_admin_client.post(
+        "/events",
+        json={
+            "title": "Seminário",
+            "description": "  Pauta: resultados do RE7S  ",
+            "start_at": "2026-10-03T10:00:00",
+            "end_at": "2026-10-03T11:00:00",
+        },
+    )
+    assert r.status_code == 200
+    ev = r.json()
+    assert ev["description"] == "Pauta: resultados do RE7S"
+
+    r = super_admin_client.patch(
+        f"/events/{ev['id']}",
+        json={"title": "Seminário", "description": "Nova pauta", "start_at": ev["start_at"], "end_at": ev["end_at"]},
+    )
+    assert r.status_code == 200
+    assert r.json()["description"] == "Nova pauta"
+    assert user_a_client.get("/events").json()[0]["description"] == "Nova pauta"

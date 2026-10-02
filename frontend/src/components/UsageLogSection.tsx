@@ -114,9 +114,16 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   function reload() {
-    api.listEquipmentLogs(equipmentId).then(setLogs).catch(() => {})
+    api
+      .listEquipmentLogs(equipmentId)
+      .then((l) => {
+        setLoadError(null)
+        setLogs(l)
+      })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar a ficha.'))
   }
   useEffect(reload, [equipmentId])
 
@@ -175,13 +182,23 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
 
   async function handleDelete(logId: number) {
     if (!confirm('Remover este registro?')) return
-    await api.deleteEquipmentLog(equipmentId, logId)
-    reload()
+    setError(null)
+    try {
+      await api.deleteEquipmentLog(equipmentId, logId)
+      reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível remover.')
+    }
   }
 
   async function handleVerify(logId: number) {
-    await api.verifyEquipmentLog(equipmentId, logId)
-    reload()
+    setError(null)
+    try {
+      await api.verifyEquipmentLog(equipmentId, logId)
+      reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível conferir.')
+    }
   }
 
   return (
@@ -201,7 +218,9 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       {adding && <EntryForm draft={draft} onChange={setDraft} onSave={handleAdd} onCancel={() => setAdding(false)} busy={busy} />}
       {error && <p className="mb-2 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
-      {logs.length === 0 ? (
+      {loadError ? (
+        <p className="text-xs" style={{ color: '#d43b3b' }}>{loadError}</p>
+      ) : logs.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Nenhum registro ainda.</p>
       ) : (
         <div className="overflow-x-auto">

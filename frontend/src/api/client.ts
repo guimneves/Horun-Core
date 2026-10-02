@@ -388,24 +388,24 @@ export const api = {
   // O backend espera o ModuleIn inteiro no PATCH (não é um merge parcial)
   // — id vai no corpo também, mesmo sendo ignorado (a rota usa o da URL).
   updateModule: (moduleId: string, payload: ModuleFull) =>
-    request<ModuleFull>(`/modules/${moduleId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
-  deleteModule: (moduleId: string) => request<{ ok: boolean }>(`/modules/${moduleId}`, { method: 'DELETE' }),
+    request<ModuleFull>(`/modules/${encodeURIComponent(moduleId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  deleteModule: (moduleId: string) => request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}`, { method: 'DELETE' }),
   setModulePublic: (moduleId: string, isPublic: boolean) =>
-    request<ModuleFull>(`/modules/${moduleId}/public`, { method: 'PATCH', body: JSON.stringify({ public: isPublic }) }),
+    request<ModuleFull>(`/modules/${encodeURIComponent(moduleId)}/public`, { method: 'PATCH', body: JSON.stringify({ public: isPublic }) }),
   setModuleUnlisted: (moduleId: string, unlisted: boolean) =>
-    request<ModuleFull>(`/modules/${moduleId}/unlisted`, { method: 'PATCH', body: JSON.stringify({ unlisted }) }),
+    request<ModuleFull>(`/modules/${encodeURIComponent(moduleId)}/unlisted`, { method: 'PATCH', body: JSON.stringify({ unlisted }) }),
 
-  listModuleAccess: (moduleId: string) => request<ModuleAccessEntry[]>(`/modules/${moduleId}/access`),
+  listModuleAccess: (moduleId: string) => request<ModuleAccessEntry[]>(`/modules/${encodeURIComponent(moduleId)}/access`),
   grantModuleAccess: (moduleId: string, userId: number) =>
-    request<{ ok: boolean }>(`/modules/${moduleId}/access`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+    request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}/access`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   revokeModuleAccess: (moduleId: string, userId: number) =>
-    request<{ ok: boolean }>(`/modules/${moduleId}/access/${userId}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}/access/${userId}`, { method: 'DELETE' }),
 
-  listModuleContributors: (moduleId: string) => request<ModuleContributor[]>(`/modules/${moduleId}/contributors`),
+  listModuleContributors: (moduleId: string) => request<ModuleContributor[]>(`/modules/${encodeURIComponent(moduleId)}/contributors`),
   addModuleContributor: (moduleId: string, userId: number) =>
-    request<ModuleContributor>(`/modules/${moduleId}/contributors`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+    request<ModuleContributor>(`/modules/${encodeURIComponent(moduleId)}/contributors`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   removeModuleContributor: (moduleId: string, userId: number) =>
-    request<{ ok: boolean }>(`/modules/${moduleId}/contributors/${userId}`, { method: 'DELETE' }),
+    request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}/contributors/${userId}`, { method: 'DELETE' }),
 
   listPosts: (groupId?: number | null) =>
     request<Post[]>(`/posts${groupId ? `?group_id=${groupId}` : ''}`),
@@ -584,7 +584,9 @@ export const api = {
     eventId: number,
     payload: {
       title: string
-      description?: string
+      // obrigatório: o PATCH regrava todos os campos, então omitir a
+      // descrição apagaria a que já existe (ex.: ao arrastar o evento)
+      description: string
       location?: string
       start_at: string
       end_at: string

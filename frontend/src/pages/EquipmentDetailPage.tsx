@@ -63,6 +63,7 @@ export function EquipmentDetailPage() {
   const [modules, setModules] = useState<ModuleStatus[]>([])
   const [moduleFulls, setModuleFulls] = useState<ModuleFull[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -85,15 +86,24 @@ export function EquipmentDetailPage() {
         setAreas(ar)
         setTypes(ty)
         setModules(mo)
+        setLoadError(null)
         setLoaded(true)
       })
-      .catch(() => setLoaded(true))
+      .catch((err) => {
+        // falha de rede/servidor não pode virar "equipamento não encontrado"
+        setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar o equipamento.')
+        setLoaded(true)
+      })
   }
   useEffect(reload, [])
   useEffect(() => {
     // lista completa (com os ocultos) só pra coordenadores; o técnico escolhe
     // entre os módulos que já enxerga no catálogo
-    if (canListAllModules) api.listModules().then(setModuleFulls).catch(() => {})
+    if (canListAllModules)
+      api
+        .listModules()
+        .then(setModuleFulls)
+        .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar a lista de módulos.'))
   }, [canListAllModules])
 
   const eq = equipment.find((e) => e.id === id) ?? null
@@ -170,7 +180,7 @@ export function EquipmentDetailPage() {
   if (loaded && !eq) {
     return (
       <div className="p-6">
-        <p style={{ color: 'var(--color-text-muted)' }}>Equipamento não encontrado.</p>
+        <p style={{ color: loadError ? '#d43b3b' : 'var(--color-text-muted)' }}>{loadError ?? 'Equipamento não encontrado.'}</p>
         <button onClick={() => navigate('/equipamentos')} className="mt-3 text-sm underline" style={{ color: 'var(--color-primary)' }}>
           ← Voltar
         </button>
@@ -404,7 +414,7 @@ export function EquipmentDetailPage() {
             <div className="mt-2">
               {linkedModule.has_access ? (
                 linkedModule.embeddable ? (
-                  <a href={`/m/${linkedModule.id}/`} className="text-sm font-medium underline" style={{ color: 'var(--color-primary)' }}>
+                  <a href={`/m/${encodeURIComponent(linkedModule.id)}/`} className="text-sm font-medium underline" style={{ color: 'var(--color-primary)' }}>
                     Abrir módulo
                   </a>
                 ) : (

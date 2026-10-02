@@ -168,3 +168,37 @@ def test_super_admin_still_creates_lab_event(super_admin_client, user_a_client):
     assert r.status_code == 200
     assert r.json()["group_id"] is None
     assert any(e["title"] == "Evento do lab" for e in user_a_client.get("/events").json())
+
+
+def test_group_post_attachment_only_for_members(super_admin_client, admin2, user_a, user_a_client, user_b_client):
+    # Antes, qualquer autenticado baixava o anexo de um aviso de grupo pelo id
+    # (Prompt_Horun_Core.md, 8.3 item 10) — agora vale a regra do mural do grupo.
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    png = b"\x89PNG\r\n\x1a\nanexo-do-grupo"
+    pid = user_a_client.post(
+        "/posts",
+        data={"content": "resultado do grupo", "group_id": str(g["id"])},
+        files={"file": ("r.png", png, "image/png")},
+    ).json()["id"]
+
+    # não-membro é barrado
+    assert user_b_client.get(f"/posts/{pid}/attachment").status_code == 403
+    # autor/membro baixa
+    att = user_a_client.get(f"/posts/{pid}/attachment")
+    assert att.status_code == 200
+    assert att.content == png
+    # coordenador (vê todo grupo) também
+    assert super_admin_client.get(f"/posts/{pid}/attachment").status_code == 200
+
+
+def test_group_post_attachment_author_keeps_access_after_leaving(super_admin_client, admin2, user_a, user_a_client):
+    g = _mk_group(super_admin_client, admin2.id).json()
+    super_admin_client.post(f"/groups/{g['id']}/members", json={"user_id": user_a.id})
+    pid = user_a_client.post(
+        "/posts",
+        data={"content": "meu anexo", "group_id": str(g["id"])},
+        files={"file": ("r.png", b"\x89PNG\r\n\x1a\nx", "image/png")},
+    ).json()["id"]
+    assert super_admin_client.delete(f"/groups/{g['id']}/members/{user_a.id}").status_code == 200
+    assert user_a_client.get(f"/posts/{pid}/attachment").status_code == 200

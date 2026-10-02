@@ -9,6 +9,7 @@ export function EquipmentQrCode({ equipmentName }: { equipmentName: string }) {
   useEffect(() => {
     QRCode.toDataURL(window.location.href, { margin: 1, width: 220 })
       .then(setDataUrl)
+      // gerar o QR é local (sem rede); se falhar, o bloco só não aparece
       .catch(() => setDataUrl(null))
   }, [])
 

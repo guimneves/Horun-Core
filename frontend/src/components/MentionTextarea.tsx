@@ -15,7 +15,9 @@ async function getMentionable(): Promise<MentionableUser[]> {
 }
 
 export function renderWithMentions(text: string) {
-  const parts = text.split(/(@[\w.-]+)/g)
+  // ponto/hífen só no meio: "@joao." destaca "@joao" e deixa o ponto final
+  // de fora (mesma ideia de _mentioned_users em routes_posts.py)
+  const parts = text.split(/(@[\w.-]*[\w-])/g)
   return parts.map((part, i) =>
     part.startsWith('@') ? (
       <strong key={i} style={{ color: 'var(--color-primary)' }}>
@@ -51,7 +53,9 @@ export function MentionTextarea({
   const [highlighted, setHighlighted] = useState(0)
 
   useEffect(() => {
-    getMentionable().then(setUsers)
+    // autocompletar é conforto: sem a lista, a @menção digitada à mão
+    // continua notificando (quem resolve é o backend)
+    getMentionable().then(setUsers).catch(() => {})
   }, [])
 
   const matches = useMemo(() => {

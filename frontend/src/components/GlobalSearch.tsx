@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, type SearchHit } from '../api/client'
+import { api, ApiError, type SearchHit } from '../api/client'
 import { SearchIcon } from '../icons'
 
 const KIND_LABEL: Record<string, string> = {
@@ -17,21 +17,29 @@ export function GlobalSearch() {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const term = q.trim()
     if (term.length < 2) {
       setHits(null)
+      setError(null)
       return
     }
     const id = setTimeout(() => {
       api
         .search(term)
         .then((r) => {
+          setError(null)
           setHits(r)
           setOpen(true)
         })
-        .catch(() => setHits([]))
+        .catch((err) => {
+          // falha não pode parecer "nada encontrado" (lição 5)
+          setError(err instanceof ApiError ? err.message : 'Não foi possível buscar agora.')
+          setHits([])
+          setOpen(true)
+        })
     }, 220)
     return () => clearTimeout(id)
   }, [q])
@@ -83,7 +91,12 @@ export function GlobalSearch() {
           className="absolute left-0 top-full z-30 mt-2 max-h-[70vh] w-full overflow-y-auto rounded-xl border shadow-lg"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
-          {grouped.length === 0 && (
+          {error && (
+            <div className="px-4 py-6 text-center text-[13px]" style={{ color: '#d43b3b' }}>
+              {error}
+            </div>
+          )}
+          {!error && grouped.length === 0 && (
             <div className="px-4 py-6 text-center text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
               Nada encontrado para "{q.trim()}".
             </div>

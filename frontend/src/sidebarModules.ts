@@ -9,6 +9,7 @@ export function readHiddenModules(): Set<string> {
   try {
     return new Set(JSON.parse(localStorage.getItem(SIDEBAR_HIDDEN_MODULES_KEY) || '[]'))
   } catch {
+    // localStorage bloqueado ou valor corrompido: mostra todos os módulos
     return new Set()
   }
 }
@@ -17,7 +18,7 @@ export function writeHiddenModules(next: Set<string>) {
   try {
     localStorage.setItem(SIDEBAR_HIDDEN_MODULES_KEY, JSON.stringify([...next]))
   } catch {
-    /* ok */
+    /* localStorage indisponível: a preferência só não é lembrada */
   }
   window.dispatchEvent(new Event(CHANGE_EVENT))
 }

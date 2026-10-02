@@ -32,10 +32,11 @@ const TAB_CAPABILITY: Record<Tab, keyof CurrentUser['can']> = {
   Permissões: 'manage_access',
 }
 
-// Nome de usuário e id de equipamento têm que ser um slug (sem espaço,
-// sem acento) — senão a menção `@usuario` quebra no espaço (e a pessoa
-// não é notificada), ou a URL/API do equipamento quebra (ver
-// _validate_equipment_id em routes_equipment.py).
+// Nome de usuário e ids de equipamento/módulo têm que ser um slug (sem
+// espaço, sem acento) — senão a menção `@usuario` quebra no espaço (e a
+// pessoa não é notificada), ou a URL/API do equipamento/módulo quebra (ver
+// _validate_equipment_id em routes_equipment.py e _validate_module_id em
+// routes_modules.py).
 function slugify(raw: string): string {
   return raw
     .toLowerCase()
@@ -441,7 +442,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   )
 }
 
-function ModuleIconInput({ module, onChange }: { module: ModuleFull; onChange: () => void }) {
+function ModuleIconInput({ module, onChange, onError }: { module: ModuleFull; onChange: () => void; onError: (msg: string) => void }) {
   const [icon, setIcon] = useState(module.icon)
   useEffect(() => setIcon(module.icon), [module.icon])
 
@@ -449,7 +450,14 @@ function ModuleIconInput({ module, onChange }: { module: ModuleFull; onChange: (
     <input
       value={icon}
       onChange={(e) => setIcon(e.target.value)}
-      onBlur={() => icon !== module.icon && icon.trim() && api.updateModule(module.id, { ...module, icon }).then(onChange)}
+      onBlur={() =>
+        icon !== module.icon &&
+        icon.trim() &&
+        api
+          .updateModule(module.id, { ...module, icon })
+          .then(onChange)
+          .catch((err) => onError(err instanceof ApiError ? err.message : 'Falha ao trocar o ícone.'))
+      }
       className="w-11 rounded-lg px-1.5 py-1 text-center text-lg outline-none"
       style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}
       title="Ícone do módulo"
@@ -457,12 +465,15 @@ function ModuleIconInput({ module, onChange }: { module: ModuleFull; onChange: (
   )
 }
 
-function ModuleContributorsCell({ moduleId, users }: { moduleId: string; users: CurrentUser[] }) {
+function ModuleContributorsCell({ moduleId, users, onError }: { moduleId: string; users: CurrentUser[]; onError: (msg: string) => void }) {
   const [contributors, setContributors] = useState<ModuleContributor[]>([])
   const [adding, setAdding] = useState('')
 
   function reload() {
-    api.listModuleContributors(moduleId).then(setContributors).catch(() => {})
+    api
+      .listModuleContributors(moduleId)
+      .then(setContributors)
+      .catch((err) => onError(err instanceof ApiError ? err.message : 'Não foi possível carregar os contribuidores.'))
   }
   useEffect(reload, [moduleId])
 
@@ -471,7 +482,11 @@ function ModuleContributorsCell({ moduleId, users }: { moduleId: string; users: 
 
   async function handleAdd(userId: string) {
     if (!userId) return
-    await api.addModuleContributor(moduleId, Number(userId))
+    try {
+      await api.addModuleContributor(moduleId, Number(userId))
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Falha ao adicionar contribuidor.')
+    }
     setAdding('')
     reload()
   }
@@ -486,7 +501,12 @@ function ModuleContributorsCell({ moduleId, users }: { moduleId: string; users: 
         >
           {c.display_name}
           <button
-            onClick={() => api.removeModuleContributor(moduleId, c.user_id).then(reload)}
+            onClick={() =>
+              api
+                .removeModuleContributor(moduleId, c.user_id)
+                .then(reload)
+                .catch((err) => onError(err instanceof ApiError ? err.message : 'Falha ao remover contribuidor.'))
+            }
             style={{ color: '#d43b3b' }}
           >
             ×
@@ -521,7 +541,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
     setError(null)
     try {
       await api.createModule({
-        id,
+        id: id.trim(),
         display_name: displayName,
         description: '',
         icon: '🧪',
@@ -557,7 +577,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
           {modules.map((m) => (
             <tr key={m.id}>
               <Td>
-                <ModuleIconInput module={m} onChange={onChange} />
+                <ModuleIconInput module={m} onChange={onChange} onError={setError} />
               </Td>
               <Td>
                 <span className="font-medium">{m.display_name}</span>
@@ -568,10 +588,23 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
                 </code>
               </Td>
               <Td>
-                <ModuleContributorsCell moduleId={m.id} users={users} />
+                <ModuleContributorsCell moduleId={m.id} users={users} onError={setError} />
               </Td>
               <Td right>
-                <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.deleteModule(m.id).then(onChange)}>
+                <button
+                  className="text-xs"
+                  style={{ color: '#d43b3b' }}
+                  onClick={() => {
+                    // permissões e créditos do módulo somem junto; equipamento
+                    // vinculado só fica desvinculado (delete_module no backend)
+                    if (!confirm(`Remover o módulo "${m.display_name}"? As permissões de acesso e os créditos dele serão apagados; equipamentos vinculados ficam sem módulo.`)) return
+                    setError(null)
+                    api
+                      .deleteModule(m.id)
+                      .then(onChange)
+                      .catch((err) => setError(err instanceof ApiError ? err.message : 'Falha ao remover módulo.'))
+                  }}
+                >
                   remover
                 </button>
               </Td>
@@ -581,7 +614,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
       </Table>
 
       <CreatePanel title="Cadastrar módulo">
-        <FieldInput label="Id (slug)" placeholder="ex.: re7s" value={id} onChange={(e) => setId(e.target.value)} />
+        <FieldInput label="Id (slug)" placeholder="ex.: re7s" value={id} onChange={(e) => setId(slugify(e.target.value))} />
         <FieldInput label="Nome público" placeholder="ex.: RE7S" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         <FieldInput label="URL interna (backend)" placeholder="http://<container>:8000" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
         <FieldInput
@@ -1063,13 +1096,25 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
   // admin interno do grupo: quem já modera no Core (níveis 1 a 4, não IC)
   const admins = users.filter((u) => u.can.moderate)
 
+  const membersError = (err: unknown) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os membros.')
+
   function reload() {
-    api.listGroups().then(setGroups)
+    api
+      .listGroups()
+      .then(setGroups)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os grupos.'))
   }
   useEffect(reload, [])
 
   useEffect(() => {
-    if (selected) api.listGroupMembers(selected.id).then(setMembers).catch(() => setMembers([]))
+    if (selected)
+      api
+        .listGroupMembers(selected.id)
+        .then(setMembers)
+        .catch((err) => {
+          setMembers([])
+          membersError(err)
+        })
     else setMembers([])
   }, [selected])
 
@@ -1093,7 +1138,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
     const fresh = await api.listGroups()
     setGroups(fresh)
     setSelected((s) => fresh.find((g) => g.id === s?.id) ?? null)
-    if (selected) api.listGroupMembers(selected.id).then(setMembers).catch(() => {})
+    if (selected) api.listGroupMembers(selected.id).then(setMembers).catch(membersError)
   }
 
   return (

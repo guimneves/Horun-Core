@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import or_, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.routes_modules import catalog_visible_modules
 from app.core.groups import visible_group_scopes
 from app.db.models import Equipment, Module, Post, User
 
@@ -64,12 +65,12 @@ def search(q: str, user: CurrentUser, session: SessionDep):
     for e in equipment:
         hits.append(SearchHit(kind="equipment", title=e.display_name, subtitle="equipamento", link="/agenda"))
 
+    # Sem `.limit` no SQL: o filtro de `unlisted` (mesma regra do catálogo)
+    # vem depois, e não pode "comer" os resultados visíveis.
     modules = session.exec(
-        select(Module)
-        .where(or_(Module.display_name.ilike(like), Module.description.ilike(like)))
-        .limit(_PER_KIND)
+        select(Module).where(or_(Module.display_name.ilike(like), Module.description.ilike(like)))
     ).all()
-    for m in modules:
+    for m, _has_access in catalog_visible_modules(session, user, list(modules))[:_PER_KIND]:
         hits.append(
             SearchHit(
                 kind="module",

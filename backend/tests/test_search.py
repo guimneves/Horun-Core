@@ -48,3 +48,25 @@ def test_search_person_hit_has_no_private_data(super_admin_client, user_a, user_
     hits = user_b_client.get("/search?q=ana").json()
     person = next(h for h in hits if h["kind"] == "person")
     assert "99999" not in str(person)
+
+
+def test_search_hides_unlisted_modules_without_access(super_admin_client, user_a, user_a_client, user_b_client):
+    # Mesma regra do catálogo (Prompt_Horun_Core.md, seção 6): `unlisted`
+    # some pra quem não tem acesso, continua pra quem tem.
+    super_admin_client.post(
+        "/modules",
+        json={"id": "oculto", "display_name": "Oculto", "description": "Rock-Eval secreto", "internal_base_url": "http://x"},
+    )
+    assert super_admin_client.patch("/modules/oculto/unlisted", json={"unlisted": True}).status_code == 200
+    super_admin_client.post("/modules/oculto/access", json={"user_id": user_a.id})
+
+    def _module_hits(c):
+        return [h for h in c.get("/search?q=rock").json() if h["kind"] == "module"]
+
+    assert _module_hits(user_b_client) == []
+    assert len(_module_hits(user_a_client)) == 1
+    assert len(_module_hits(super_admin_client)) == 1
+
+    # público volta a aparecer pra todo mundo
+    super_admin_client.patch("/modules/oculto/public", json={"public": True})
+    assert len(_module_hits(user_b_client)) == 1

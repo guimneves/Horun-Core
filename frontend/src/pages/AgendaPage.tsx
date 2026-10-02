@@ -77,6 +77,7 @@ function EventPanel({
   const editing = !!initial
   const [title, setTitle] = useState(initial?.title ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
   const [allDay, setAllDay] = useState(initial?.all_day ?? false)
   const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(new Date()))
   const [endDate, setEndDate] = useState(initial ? toLocalInputDate(new Date(initial.end_at)) : toLocalInputDate(new Date()))
@@ -96,6 +97,7 @@ function EventPanel({
     try {
       const body = {
         title,
+        description,
         location,
         all_day: allDay,
         start_at: allDay ? `${date}T00:00:00` : `${date}T${start}:00`,
@@ -135,6 +137,22 @@ function EventPanel({
 
       <label className={labelCls} style={labelStyle}>Local (opcional)</label>
       <input value={location} onChange={(e) => setLocation(e.target.value)} disabled={readOnly} placeholder="ex.: Sala 512" className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
+
+      {/* Só leitura: texto corrido (respeitando quebras de linha) em vez de
+          um textarea desabilitado — é o que a pessoa veio ler. */}
+      {readOnly ? (
+        description && (
+          <>
+            <label className={labelCls} style={labelStyle}>Descrição</label>
+            <p className="mb-3 whitespace-pre-wrap text-[13px]" style={{ color: 'var(--color-text)' }}>{description}</p>
+          </>
+        )
+      ) : (
+        <>
+          <label className={labelCls} style={labelStyle}>Descrição (opcional)</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="ex.: pauta, link da chamada, o que levar" className={`mb-3 resize-y ${field}`} style={fieldStyle} />
+        </>
+      )}
 
       <label className="mb-3 flex items-center gap-2 text-[13px]">
         <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} disabled={readOnly} />
@@ -201,10 +219,12 @@ export function AgendaPage() {
   const [drag, setDrag] = useState<DragState | null>(null)
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [scope, setScope] = useState<number | null>(null) // null = laboratório
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [hidden, setHidden] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || '[]'))
     } catch {
+      // localStorage bloqueado ou valor corrompido: só não lembra a legenda
       return new Set()
     }
   })
@@ -229,13 +249,17 @@ export function AgendaPage() {
         setReservations(res)
         setEvents(ev)
         setBirthdays(bd)
+        setLoadError(null)
       })
-      .catch(() => {})
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar a agenda.'))
   }
   useEffect(reload, [weekOffset])
 
   useEffect(() => {
-    api.listGroups().then((gs) => setMyGroups(gs.filter((g) => g.is_member))).catch(() => {})
+    api
+      .listGroups()
+      .then((gs) => setMyGroups(gs.filter((g) => g.is_member)))
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar os grupos.'))
   }, [])
 
   // Vindo da página Equipamentos ("ir para a agenda"): garante que aquele
@@ -250,7 +274,7 @@ export function AgendaPage() {
     try {
       localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
     } catch {
-      /* ok */
+      /* localStorage indisponível: a legenda só não é lembrada */
     }
   }, [searchParams])
 
@@ -267,7 +291,7 @@ export function AgendaPage() {
       try {
         localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next]))
       } catch {
-        /* ok */
+        /* localStorage indisponível: a legenda só não é lembrada */
       }
       return next
     })
@@ -303,7 +327,7 @@ export function AgendaPage() {
     try {
       e.currentTarget.setPointerCapture(e.pointerId)
     } catch {
-      /* ok */
+      /* captura é só conforto (arrastar fora do bloco); sem ela o arraste segue */
     }
     setDrag({ kind, id, mode: onHandle ? 'resize' : 'move', dayIndex, startFrac, endFrac, equipmentId, moved: false })
   }
@@ -339,7 +363,7 @@ export function AgendaPage() {
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {
-      /* ok */
+      /* ponteiro já liberado — nada a fazer */
     }
     const d = drag
     setDrag(null)
@@ -369,6 +393,8 @@ export function AgendaPage() {
         const ev = events.find((x) => x.id === d.id)!
         await api.updateEvent(d.id, {
           title: ev.title,
+          // o PATCH regrava todos os campos — sem isto, arrastar apagava a descrição
+          description: ev.description,
           location: ev.location,
           all_day: false,
           group_id: ev.group_id,
@@ -428,6 +454,12 @@ export function AgendaPage() {
             </button>
           </div>
         </div>
+
+        {loadError && (
+          <p className="px-6 py-2 text-[13px]" style={{ color: '#d43b3b', borderBottom: '1px solid var(--color-border)' }}>
+            {loadError}
+          </p>
+        )}
 
         {/* Grade */}
         <div className="flex flex-1 overflow-auto">
@@ -517,7 +549,7 @@ export function AgendaPage() {
                             userSelect: 'none',
                             zIndex: dragging ? 10 : undefined,
                           }}
-                          title={editable ? 'Arraste para mover · borda de baixo para redimensionar · clique para editar' : e.title}
+                          title={editable ? 'Arraste para mover · borda de baixo para redimensionar · clique para editar' : e.description ? `${e.title} — ${e.description}` : e.title}
                         >
                           <div className="truncate text-[11px] font-semibold" style={{ color: 'var(--color-text)' }}>{e.title}</div>
                           <div className="truncate text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{e.location || e.created_by_name}</div>

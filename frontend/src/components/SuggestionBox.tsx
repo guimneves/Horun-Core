@@ -22,12 +22,14 @@ export function SuggestionBox() {
 
   const [unread, setUnread] = useState(0)
   const [items, setItems] = useState<Suggestion[] | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
 
   const refreshCount = useCallback(() => {
     if (!isProtected) return
     api
       .unreadSuggestionCount()
       .then((r) => setUnread(r.count))
+      // polling de fundo: falha só mantém o número antigo até a próxima rodada
       .catch(() => {})
   }, [isProtected])
 
@@ -50,8 +52,14 @@ export function SuggestionBox() {
   function loadList() {
     api
       .listSuggestions()
-      .then(setItems)
-      .catch(() => setItems([]))
+      .then((list) => {
+        setListError(null)
+        setItems(list)
+      })
+      .catch((err) => {
+        setListError(err instanceof ApiError ? err.message : 'Não foi possível carregar as sugestões.')
+        setItems([])
+      })
   }
 
   function toggle() {
@@ -154,7 +162,12 @@ export function SuggestionBox() {
                     Carregando…
                   </div>
                 )}
-                {items !== null && items.length === 0 && (
+                {listError && (
+                  <div className="px-4 py-6 text-center text-[13px]" style={{ color: '#d43b3b' }}>
+                    {listError}
+                  </div>
+                )}
+                {!listError && items !== null && items.length === 0 && (
                   <div className="px-4 py-6 text-center text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
                     Nenhuma sugestão ainda.
                   </div>

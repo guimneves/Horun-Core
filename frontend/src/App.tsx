@@ -38,6 +38,8 @@ function EmbeddedModulesNav() {
   const [hidden, setHidden] = useState<Set<string>>(() => readHiddenModules())
 
   useEffect(() => {
+    // barra lateral é só atalho: se falhar, fica sem os módulos (a página
+    // Módulos mostra o erro de carregamento)
     api.dashboardModules().then(setModules).catch(() => {})
   }, [])
 
@@ -59,7 +61,7 @@ function EmbeddedModulesNav() {
         // de verdade, não navegação client-side do React Router do Core.
         <a
           key={m.id}
-          href={`/m/${m.id}/`}
+          href={`/m/${encodeURIComponent(m.id)}/`}
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm"
           style={{ color: 'var(--color-text)' }}
         >

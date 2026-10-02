@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Equipment, type Reservation } from '../api/client'
+import { api, ApiError, type Equipment, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
 import { toLocalIso } from '../lib/datetime'
@@ -37,6 +37,7 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [panel, setPanel] = useState<'new' | Reservation | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const monday = useMemo(() => addDays(getMonday(new Date()), weekOffset * 7), [weekOffset])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday])
@@ -47,8 +48,11 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
     const end = addDays(monday, 7)
     api
       .listReservations({ start: toLocalIso(start), end: toLocalIso(end) })
-      .then((all) => setReservations(all.filter((r) => r.equipment_id === equipment.id)))
-      .catch(() => {})
+      .then((all) => {
+        setLoadError(null)
+        setReservations(all.filter((r) => r.equipment_id === equipment.id))
+      })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar as reservas.'))
   }
   useEffect(reload, [monday, equipment.id])
 
@@ -80,6 +84,12 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
             Reservar
           </button>
         </div>
+
+        {loadError && (
+          <p className="px-4 py-2 text-xs" style={{ color: '#d43b3b', borderBottom: '1px solid var(--color-border)' }}>
+            {loadError}
+          </p>
+        )}
 
         <div className="flex overflow-x-auto">
           <div className="w-11 flex-shrink-0" style={{ paddingTop: HEADER_HEIGHT }}>
