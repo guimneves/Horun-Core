@@ -58,17 +58,31 @@ def _core_commit() -> str:
         return "desconhecido"
 
 
-def vendor(frontend: Path) -> Path:
-    target = frontend / VENDOR_REL
-    if target.exists():
-        shutil.rmtree(target)
-    target.mkdir(parents=True)
+def _source_files() -> dict[str, Path]:
+    files: dict[str, Path] = {}
     for name in COPIED:
-        src = SOURCE / name
-        if src.is_dir():
-            shutil.copytree(src, target / name)
-        elif src.exists():
-            shutil.copy2(src, target / name)
+        base = SOURCE / name
+        for f in [base] if base.is_file() else sorted(p for p in base.rglob("*") if p.is_file()):
+            files[f.relative_to(SOURCE).as_posix()] = f
+    return files
+
+
+def vendor(frontend: Path) -> Path:
+    """Sincroniza em vez de apagar e recriar: no Windows (principalmente
+    dentro do OneDrive) apagar a pasta inteira falha com "Acesso negado"
+    quando algum programa está com ela aberta. Sobrescreve os arquivos e
+    remove só os que não existem mais no Core."""
+    target = frontend / VENDOR_REL
+    target.mkdir(parents=True, exist_ok=True)
+    wanted = _source_files()
+    for rel, src in wanted.items():
+        dst = target / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    for existing in sorted(p for p in target.rglob("*") if p.is_file()):
+        rel = existing.relative_to(target).as_posix()
+        if rel != STAMP and rel not in wanted:
+            existing.unlink()
 
     version = json.loads((SOURCE / "package.json").read_text(encoding="utf-8"))["version"]
     (target / STAMP).write_text(
