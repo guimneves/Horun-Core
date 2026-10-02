@@ -12,6 +12,20 @@
 		on_demand
 	}
 
+	# Cabeçalhos de segurança em toda resposta (Core e módulos):
+	# - nosniff: o navegador nunca "adivinha" o tipo de um arquivo enviado
+	#   (ex. um HTML disfarçado de imagem no Mural não vira página);
+	# - SAMEORIGIN: nenhum outro site pode embutir o Horun num iframe;
+	# - Referrer-Policy: links para fora não levam o caminho interno.
+	# Sem HSTS por enquanto: com certificado self-signed ele só atrapalharia
+	# (ver Prompt_Horun_Core.md, seção 8.3, item 1).
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
 	# Tudo sob /api vai pro backend do Core (prefixo removido antes de
 	# chegar lá — nenhuma rota do FastAPI usa "/api" nesse nível, exceto
 	# dentro de /m/{id}/..., que é outro caso, abaixo).

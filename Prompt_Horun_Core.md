@@ -115,6 +115,8 @@ Backend com **239 testes automatizados** (`backend/tests/`), todos passando; cad
 8. **`<img>` de rota autenticada** em dev cross-origin precisa de `crossOrigin="use-credentials"`; troca de foto usa cache-buster `?v=` (`userVersion` no `AuthContext`).
 9. **Caddy catch-all `:443`** (sem hostname) precisa de `tls internal { on_demand }`, senão todo handshake falha com `internal_error`.
 10. **O proxy nunca repassa identidade vinda do navegador** (`build_forward_headers` em `routes_proxy.py`). Até 2026-10-01 ele copiava os cabeçalhos do cliente e só depois acrescentava os `X-Horun-*` — o Starlette entrega os nomes em minúsculas, o Core escrevia com outra caixa, e o módulo recebia **os dois**, lendo o forjado: qualquer usuário logado virava admin ou outra pessoa dentro de qualquer módulo. Hoje os nomes de identidade são reservados (descartados na entrada, sem diferenciar maiúsculas) e o cookie de sessão do Core não segue para o módulo. Teste de regressão em `tests/test_proxy.py`. Todo cabeçalho de identidade novo entra em `RESERVED_IDENTITY_HEADERS`.
+11. **Login endurecido (2026-10-02)** — `app/core/rate_limit.py`: 5 erros por usuário / 20 por IP em 15 min → 429 (login e primeiro acesso; usuário inexistente gasta o mesmo tempo de bcrypt). Código de primeiro acesso com 8 caracteres sem ambíguos (`ABCDEFGHJKMNPQRSTUVWXYZ23456789`), validade de 7 dias (`User.setup_code_expires_at`), comparação em tempo constante. `User.session_version` no token: trocar senha, coordenador definir senha ou "gerar novo acesso" derruba todas as sessões daquela pessoa (quem trocou a própria senha continua logado). Cookie `Secure` via `CORE_COOKIE_SECURE=true` (no compose). Middleware recusa POST/PUT/PATCH/DELETE com `Origin` de outro site. Caddy: `nosniff`, `X-Frame-Options SAMEORIGIN`, `Referrer-Policy`. O limitador é em memória — vale enquanto o backend tiver um worker só.
+12. **Em produção, o Core não sobe com `CORE_SECRET_KEY` de exemplo ou com menos de 32 caracteres** (`config.check_production_settings`) — com a chave conhecida, qualquer um forja o cookie de sessão de qualquer pessoa.
 
 ### 8.3 Ainda não implementado
 
@@ -128,10 +130,7 @@ Backend com **239 testes automatizados** (`backend/tests/`), todos passando; cad
 8. **Anexos em respostas do Mural** — baixa prioridade.
 9. **Equipamentos, Fase C** — sincronizar a ficha RUE do Core com o histórico interno de cada módulo; não desenhado.
 10. **Achados da revisão de 2026-10-01 ainda abertos** (o mais grave, identidade forjada pelo proxy, já foi corrigido — lição 10):
-    - código de primeiro acesso (6 hex) e login sem limite de tentativas; o `428` revela quais contas estão esperando código;
-    - trocar a senha ou "gerar novo acesso" não derruba sessões já abertas (falta `session_version` no token);
-    - cookie de sessão sem `secure`, Caddy sem cabeçalhos de segurança (`nosniff`, `X-Frame-Options`), sem checagem de `Origin` no `POST /posts` (multipart);
-    - **nenhum backup do Postgres** (fotos e anexos também estão no banco);
+    - ~~login/código sem limite de tentativas, sessões que não caíam, cookie sem `secure`, Caddy sem cabeçalhos, sem checagem de `Origin`, sem backup~~ — **resolvidos em 2026-10-02** (lições 11 e 12; backup na seção 9.4). O `428` do login continua revelando quais contas esperam código (necessário para a tela levar ao "Primeiro acesso"), agora com limite de tentativas e código forte;
     - anexo de aviso de grupo baixável por quem não é do grupo (`GET /posts/{id}/attachment`);
     - excluir módulo com permissões/créditos/equipamento vinculado dá 500 no Postgres;
     - a busca global mostra módulos `unlisted`; o dashboard checa a saúde dos módulos em série (bloqueia o servidor com módulos fora do ar);

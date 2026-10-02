@@ -15,12 +15,16 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 def get_current_user(request: Request, session: SessionDep) -> User:
     token = request.cookies.get(SESSION_COOKIE_NAME, "")
-    user_id = read_session_token(token)
-    if user_id is None:
+    parsed = read_session_token(token)
+    if parsed is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Não autenticado")
+    user_id, session_version = parsed
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário não encontrado")
+    if session_version != (user.session_version or 0):
+        # senha trocada ou novo código de acesso gerado depois deste login
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sessão encerrada — entre de novo")
     return user
 
 

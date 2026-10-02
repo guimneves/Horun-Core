@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
 
 from app.api import (
@@ -21,6 +23,7 @@ from app.api import (
     routes_search,
     routes_suggestions,
 )
+from app.core.config import check_production_settings
 from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.core.security import hash_password
 from app.db.models import User
@@ -29,6 +32,7 @@ from app.db.session import create_db_and_tables, engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    check_production_settings()
     create_db_and_tables()
     _bootstrap_super_admin_if_configured()
     start_scheduler()
@@ -41,13 +45,33 @@ app = FastAPI(title="Horun Core", version="0.1.0", lifespan=lifespan)
 # Desenvolvimento: frontend roda em outra porta no mesmo localhost (Vite
 # dev server) — CORS liberado só para localhost, mesmo padrão do RE7S. Em
 # produção o front é servido pelo mesmo Caddy/origem do Core, sem CORS.
+DEV_ORIGINS = ["http://localhost:5174", "http://127.0.0.1:5174"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174", "http://127.0.0.1:5174"],
+    allow_origins=DEV_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.middleware("http")
+async def reject_cross_site_writes(request: Request, call_next):
+    """Defesa contra CSRF: um pedido que ALTERA dados e vem com `Origin` de
+    outro site é recusado. O cookie já é SameSite=Lax (o navegador não o
+    manda num POST de outro site), isto é a segunda camada — cobre também o
+    POST multipart do Mural, que passa como "pedido simples" sem preflight.
+    Sem `Origin` (curl, agentes, testes) segue normal: o que protege nesses
+    casos é o próprio cookie de sessão, que só o navegador tem."""
+    origin = request.headers.get("origin")
+    if request.method in _UNSAFE_METHODS and origin and origin not in DEV_ORIGINS:
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+        if urlsplit(origin).netloc != host:
+            return JSONResponse({"detail": "Origem não permitida"}, status_code=403)
+    return await call_next(request)
 
 app.include_router(routes_auth.router)
 app.include_router(routes_modules.router)

@@ -13,6 +13,15 @@ from app.db.models import User
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    # contador de tentativas de login é global (em memória) — zera por teste
+    from app.core import rate_limit
+
+    rate_limit.reset()
+    yield
+
+
 @pytest.fixture()
 def db_engine():
     # StaticPool: um único SQLite em memória compartilhado entre todas as

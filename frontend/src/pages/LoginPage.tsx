@@ -176,8 +176,10 @@ export function LoginPage() {
               style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
               value={setupCode}
               onChange={(e) => setSetupCode(e.target.value.toUpperCase())}
-              placeholder="ABC123"
-              maxLength={6}
+              placeholder="ABCD2345"
+              // 8 caracteres desde 2026-10-02 (aceita hífen/espaço ao digitar);
+              // códigos antigos de 6 continuam valendo
+              maxLength={12}
             />
 
             <label className="mb-1.5 block text-[13px] font-medium">Nova senha</label>

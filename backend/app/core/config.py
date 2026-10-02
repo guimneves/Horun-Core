@@ -13,6 +13,9 @@ class Settings:
     # segredo de verdade gerenciado no .env do servidor (ver .env.example).
     secret_key: str = os.environ.get("CORE_SECRET_KEY", "dev-only-troque-em-producao")
     session_max_age_seconds: int = 60 * 60 * 12  # 12h
+    # Cookie de sessão só por HTTPS. Ligado no docker-compose (produção,
+    # atrás do Caddy com TLS); desligado no dev local (http://localhost).
+    cookie_secure: bool = os.environ.get("CORE_COOKIE_SECURE", "false").lower() == "true"
 
     # Timeout curto: health check de módulo não pode travar o dashboard se
     # um módulo estiver com o container parado/inacessível.
@@ -34,3 +37,19 @@ class Settings:
 
 
 settings = Settings()
+
+_PLACEHOLDER_PREFIXES = ("dev-only", "troque")
+
+
+def check_production_settings() -> None:
+    """Na subida: com banco de produção (não SQLite), recusa iniciar com a
+    chave de sessão padrão/de exemplo ou curta — com ela, qualquer um que a
+    conheça forja o cookie de sessão de qualquer pessoa."""
+    if settings.database_url.startswith("sqlite"):
+        return
+    key = settings.secret_key or ""
+    if len(key) < 32 or key.lower().startswith(_PLACEHOLDER_PREFIXES):
+        raise RuntimeError(
+            "CORE_SECRET_KEY ausente, curta ou ainda com o valor de exemplo. Gere uma com: "
+            'python -c "import secrets; print(secrets.token_hex(32))"'
+        )

@@ -3,7 +3,7 @@ def test_create_user_without_password_gets_setup_code(super_admin_client):
     assert r.status_code == 200
     body = r.json()
     assert body["setup_code"] is not None
-    assert len(body["setup_code"]) == 6
+    assert len(body["setup_code"]) == 8
 
 
 def test_create_user_with_password_has_no_setup_code(super_admin_client):

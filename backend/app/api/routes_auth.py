@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import calendar
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, UploadFile, status
 from pydantic import BaseModel, field_validator
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep, CoordinatorUser
 from app.core.permissions import LEVEL_LABELS, capabilities, is_coordinator_or_above, user_level
 from app.core.birthdays import birthdays_between
+from app.core import rate_limit
+from app.core.config import settings
 from app.core.security import (
     SESSION_COOKIE_NAME,
+    SETUP_CODE_VALID_DAYS,
+    burn_password_check,
     create_session_token,
     generate_setup_code,
     hash_password,
+    setup_code_matches,
     verify_password,
 )
 from app.db.models import (
@@ -213,10 +218,35 @@ def _out(user: User) -> UserOut:
     )
 
 
+def _set_session_cookie(response: Response, user: User) -> None:
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        create_session_token(user.id, user.session_version or 0),
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        max_age=settings.session_max_age_seconds,
+    )
+
+
+def _end_other_sessions(user: User) -> None:
+    """Toda sessão já aberta desta pessoa deixa de valer (o token carrega a
+    versão — ver deps.get_current_user). Quem chama faz o commit."""
+    user.session_version = (user.session_version or 0) + 1
+
+
+def _new_setup_code(user: User) -> None:
+    user.setup_code = generate_setup_code()
+    user.setup_code_expires_at = datetime.now(timezone.utc) + timedelta(days=SETUP_CODE_VALID_DAYS)
+
+
 @router.post("/auth/login", response_model=UserOut)
-def login(payload: LoginRequest, response: Response, session: SessionDep):
+def login(payload: LoginRequest, request: Request, response: Response, session: SessionDep):
+    rate_limit.check("login", payload.username, request)
     user = session.exec(select(User).where(User.username == payload.username)).first()
     if user is None:
+        burn_password_check(payload.password)  # mesmo tempo de um usuário que existe
+        rate_limit.record_failure("login", payload.username, request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário ou senha inválidos")
     if user.password_hash is None:
         raise HTTPException(
@@ -224,46 +254,54 @@ def login(payload: LoginRequest, response: Response, session: SessionDep):
             "Esta conta ainda não tem senha definida — use 'Primeiro acesso' com o código que o administrador te passou.",
         )
     if not verify_password(payload.password, user.password_hash):
+        rate_limit.record_failure("login", payload.username, request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuário ou senha inválidos")
 
-    token = create_session_token(user.id)
-    response.set_cookie(
-        SESSION_COOKIE_NAME,
-        token,
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 12,
-    )
+    rate_limit.record_success("login", payload.username, request)
+    _set_session_cookie(response, user)
     return _out(user)
 
 
 @router.post("/auth/set-password", response_model=UserOut)
-def set_password(payload: SetPasswordRequest, response: Response, session: SessionDep):
+def set_password(payload: SetPasswordRequest, request: Request, response: Response, session: SessionDep):
     """Primeiro acesso: troca o código de configuração (dado pelo
     administrador máximo na criação) pela senha definitiva escolhida pela
     própria pessoa, e já efetua o login."""
+    # o código é o que protege uma conta recém-criada: limite de tentativas,
+    # comparação em tempo constante e prazo de validade
+    rate_limit.check("setup", payload.username, request)
     user = session.exec(select(User).where(User.username == payload.username)).first()
-    if user is None or user.password_hash is not None or user.setup_code != payload.setup_code.upper():
+    if user is None or user.password_hash is not None or not setup_code_matches(user.setup_code, payload.setup_code):
+        rate_limit.record_failure("setup", payload.username, request)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Usuário ou código de primeiro acesso inválido")
+    expires = user.setup_code_expires_at
+    if expires is not None:
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if expires < datetime.now(timezone.utc):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Código de primeiro acesso expirado — peça um novo a um coordenador.",
+            )
     if len(payload.new_password) < 6:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A senha precisa ter pelo menos 6 caracteres")
 
+    rate_limit.record_success("setup", payload.username, request)
     user.password_hash = hash_password(payload.new_password)
     user.setup_code = None
+    user.setup_code_expires_at = None
+    _end_other_sessions(user)
     session.add(user)
     session.commit()
     session.refresh(user)
 
-    token = create_session_token(user.id)
-    response.set_cookie(
-        SESSION_COOKIE_NAME, token, httponly=True, samesite="lax", max_age=60 * 60 * 12
-    )
+    _set_session_cookie(response, user)
     return _out(user)
 
 
 @router.post("/auth/logout")
 def logout(response: Response):
-    response.delete_cookie(SESSION_COOKIE_NAME)
+    response.delete_cookie(SESSION_COOKIE_NAME, httponly=True, samesite="lax", secure=settings.cookie_secure)
     return {"ok": True}
 
 
@@ -302,7 +340,7 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
 
 
 @router.post("/auth/change-password", response_model=UserOut)
-def change_my_password(payload: ChangePasswordRequest, user: CurrentUser, session: SessionDep):
+def change_my_password(payload: ChangePasswordRequest, response: Response, user: CurrentUser, session: SessionDep):
     """Autoatendimento — a própria pessoa troca a senha quando quiser, não
     só no primeiro acesso (aquele fluxo usa `setup_code`, ver
     /auth/set-password). Pedido do usuário: cadastrar todo mundo com senha
@@ -313,9 +351,13 @@ def change_my_password(payload: ChangePasswordRequest, user: CurrentUser, sessio
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "A nova senha precisa ter pelo menos 6 caracteres")
 
     user.password_hash = hash_password(payload.new_password)
+    # derruba as outras sessões (ex. um computador onde a pessoa esqueceu
+    # logada) e mantém só esta, com um cookie novo
+    _end_other_sessions(user)
     session.add(user)
     session.commit()
     session.refresh(user)
+    _set_session_cookie(response, user)
     return _out(user)
 
 
@@ -368,6 +410,9 @@ def create_user(payload: CreateUserRequest, _admin: CoordinatorUser, session: Se
         username=username,
         password_hash=hash_password(payload.password) if payload.password else None,
         setup_code=None if payload.password else generate_setup_code(),
+        setup_code_expires_at=None
+        if payload.password
+        else datetime.now(timezone.utc) + timedelta(days=SETUP_CODE_VALID_DAYS),
         display_name=payload.display_name or payload.username,
         full_name=payload.full_name,
         email=payload.email,
@@ -471,8 +516,12 @@ def update_user(user_id: int, payload: UpdateUserRequest, _admin: CoordinatorUse
     if payload.display_name is not None:
         user.display_name = payload.display_name
     if payload.password is not None:
+        if len(payload.password) < 6:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "A senha precisa ter pelo menos 6 caracteres")
         user.password_hash = hash_password(payload.password)
         user.setup_code = None
+        user.setup_code_expires_at = None
+        _end_other_sessions(user)
     if payload.position is not None:
         user.position = payload.position
     if payload.qualification is not None:
@@ -495,7 +544,10 @@ def regenerate_setup_code(user_id: int, _admin: CoordinatorUser, session: Sessio
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta é a conta protegida do Core — não pode ser alterada.")
 
     user.password_hash = None
-    user.setup_code = generate_setup_code()
+    _new_setup_code(user)
+    # "gerar novo acesso" é o jeito de revogar alguém sem apagar histórico:
+    # tem que derrubar as sessões abertas também, não só a senha
+    _end_other_sessions(user)
     session.add(user)
     session.commit()
     session.refresh(user)

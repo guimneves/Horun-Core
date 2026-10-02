@@ -101,6 +101,12 @@ class User(SQLModel, table=True):
     # Conta de bootstrap protegida — mesmo raciocínio do RE7S (ver
     # app/api/routes_auth.py): sempre precisa existir um acesso de backup.
     is_protected: bool = Field(default=False)
+    # Incrementado ao trocar a senha / gerar novo código de acesso: invalida
+    # todas as sessões já abertas (entra no token — core/security.py).
+    session_version: int = Field(default=0)
+    # Validade do `setup_code` (primeiro acesso). None = sem prazo (códigos
+    # gerados antes desta regra continuam valendo até serem usados/trocados).
+    setup_code_expires_at: Optional[datetime] = None
     # False = ainda não passou pelo "complete seu perfil" do primeiro
     # acesso. A migração marca as contas já existentes como True (não
     # incomodar quem já usa); contas novas nascem False.

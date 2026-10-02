@@ -64,6 +64,8 @@ services:
     environment:
       CORE_DATABASE_URL: postgresql+psycopg://horun_core:${POSTGRES_PASSWORD}@db:5432/horun_core
       CORE_SECRET_KEY: ${CORE_SECRET_KEY}
+      # cookie de sessão só por HTTPS (o Caddy serve tudo em TLS)
+      CORE_COOKIE_SECURE: "true"
       CORE_BOOTSTRAP_ADMIN_USERNAME: ${CORE_BOOTSTRAP_ADMIN_USERNAME}
       CORE_BOOTSTRAP_ADMIN_PASSWORD: ${CORE_BOOTSTRAP_ADMIN_PASSWORD}
       SMTP_HOST: ${SMTP_HOST:-}
