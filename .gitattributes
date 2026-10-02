@@ -1,0 +1,2 @@
+# Scripts que rodam dentro de containers Linux: sempre LF (com CRLF o sh quebra).
+*.sh text eol=lf

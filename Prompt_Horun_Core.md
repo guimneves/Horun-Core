@@ -149,9 +149,9 @@ Backend com **239 testes automatizados** (`backend/tests/`), todos passando; cad
 
 O `nqtrmaster` (`192.168.31.2`) é o **controlador de domínio (AD DC)** do laboratório (`NETLOGON`/`SYSVOL` presentes, domínio `NQTRlab.INT`). **Decisão fechada**: nenhum serviço do Horun roda nele — app num DC aumenta a superfície de ataque e arrisca o domínio inteiro.
 
-**Máquina atual**: `DESKTOP-N6KR7DO` — Windows 11 Pro 64 bits, 15,4 GB RAM, ~222 GB, AMD64, placa Gigabyte A520M K V2 (SVM Mode habilitado na BIOS). Ligada via **Wi-Fi**, sem IP fixo. (O primeiro candidato, `NQTR-PC37`, foi qualificado mas liberado pra outro uso.)
+**Máquina atual**: `DESKTOP-N6KR7DO` — Windows 11 Pro 64 bits, 15,4 GB RAM, ~222 GB, AMD64, placa Gigabyte A520M K V2 (SVM Mode habilitado na BIOS). Ligada via **Wi-Fi**. (O primeiro candidato, `NQTR-PC37`, foi qualificado mas liberado pra outro uso.)
 
-**Atenção ao IP**: o endereço combinado era `192.168.31.171`, mas em 2026-09-14 o DHCP trocou para `.117` sem aviso e o acesso parou (máquina e containers saudáveis — só o endereço mudou). **Pendente**: reserva de DHCP no roteador pro MAC dessa máquina e, se possível, cabo Ethernet. Diagnóstico rápido: `ipconfig` na própria máquina.
+**IP fixo: `192.168.31.80`** (fixado pelo usuário em 2026-10-02). Acesso: `https://192.168.31.80`. Antes disso a máquina não tinha IP fixo: o combinado era `.171`, e em 2026-09-14 o DHCP trocou para `.117` sem aviso e o acesso parou (máquina e containers saudáveis — só o endereço mudou). Ao trocar de IP, atualizar também o `server_url` do `config.json` do Agente Horun no PC do equipamento. Se possível, cabo Ethernet em vez de Wi-Fi. Diagnóstico rápido: `ipconfig` na própria máquina.
 
 **[A DEFINIR]**: nome DNS interno (ex. `horun.nqtrlab.int`, depende de criar registro no `nqtrmaster`); se a máquina entra no domínio (não obrigatório — o Horun tem login próprio).
 
@@ -185,6 +185,32 @@ O `nqtrmaster` (`192.168.31.2`) é o **controlador de domínio (AD DC)** do labo
 - **Arquivos**: `docker-compose.yml` (`db` Postgres 16, `backend`, `proxy`), `deploy/Dockerfile` (build do frontend + Caddy), `deploy/Caddyfile` (`/api/*` e `/m/*` → backend; `:80` → `:443`), `.env.example`. O backend do Core também entra na rede externa `horun-network`, por onde alcança o backend/frontend de cada módulo pelo nome do container.
 - **TLS: self-signed** via `tls internal` do Caddy — aviso aceito uma vez por pessoa/PC. Migração para certificado confiável: seção 8.3, item 1.
 
-### 9.4 Agente no PC do equipamento (padrão para módulos que gravam em arquivo local)
+### 9.4 Backup do Postgres e restauração
+
+Cada projeto com banco (Core, RE7S — e todo módulo novo, ver `Prompt_Horun_Modulo.md`) tem um serviço **`db-backup`** no `docker-compose.yml`: mesma imagem `postgres:16-alpine` do banco, rodando `deploy/backup/pg_backup.sh`.
+
+- Faz um `pg_dump -Fc` (formato custom, comprimido) **ao subir e a cada `BACKUP_INTERVAL_HOURS`** (padrão 24), confere que o arquivo abre (`pg_restore --list`) e só então o renomeia para `<prefixo>_AAAA-MM-DD_HHMM.dump` — um dump interrompido nunca parece válido.
+- Apaga os dumps do próprio prefixo com mais de `BACKUP_KEEP_DAYS` (padrão 30).
+- Grava em **`BACKUP_DIR`** (no `.env`), uma pasta do Windows **fora do volume do Docker e do repositório** — sobrevive a `docker compose down -v` e a um Docker corrompido. Sugestão: `C:/HorunBackups/core` e `C:/HorunBackups/re7s`, e copiar essa pasta para fora da máquina (OneDrive, HD externo, outro PC) — backup só na mesma máquina não protege contra perda do disco.
+- Conferir que está rodando: `docker compose logs db-backup` (uma linha `ok: <arquivo> (<tamanho>)` por dump) e a pasta `BACKUP_DIR`.
+- Forçar um dump agora: `docker compose run --rm -e BACKUP_ONCE=1 db-backup`.
+
+**Restaurar** — a pasta de backup já está montada em `/backups` dentro do `db-backup` (que também já tem a senha do banco), então o `pg_restore` roda lá, sem copiar arquivo:
+
+```powershell
+# 1. parar quem escreve no banco
+docker compose stop backend
+# 2. ver os dumps disponíveis
+docker compose exec db-backup ls -lh /backups
+# 3. restaurar o escolhido por cima do banco atual
+#    Core: -d horun_core   |   RE7S: -d horun_re7s
+docker compose exec db-backup pg_restore --clean --if-exists --no-owner -d horun_core /backups/horun_core_2026-10-02_0300.dump
+# 4. subir de novo
+docker compose start backend
+```
+
+Vale testar uma restauração uma vez (num banco de teste ou numa cópia), antes de precisar de verdade.
+
+### 9.5 Agente no PC do equipamento (padrão para módulos que gravam em arquivo local)
 
 O site roda no servidor; quem escreve no disco do equipamento é um **agente local** instalado só no PC do equipamento. O agente **inicia a conexão pra fora** (não abre porta de entrada), autentica com **token próprio por instalação** (nunca o perfil compartilhado `equipamento`), escreve por substituição atômica, e o site marca gravações como "pendentes" quando o agente está offline, reenviando depois. Implementado no RE7S (`Prompt_refinado.md` do RE7S, seções 14-18). O **Leco** não tem caminho pra isso ainda — o Cornerstone do LECO 832 roda sem licença de rede.

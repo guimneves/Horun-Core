@@ -23,3 +23,6 @@ backend/logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Dumps do serviço db-backup (pasta padrão; em produção use BACKUP_DIR fora do repositório)
+backups/
