@@ -944,14 +944,22 @@ function PermissionsTab({
 
   const selectedModule = modules.find((m) => m.id === moduleId) ?? null
 
-  useEffect(() => {
-    if (moduleId) api.listModuleAccess(moduleId).then(setAccess)
-    else setAccess([])
-  }, [moduleId])
+  const [accessError, setAccessError] = useState<string | null>(null)
 
   function reloadAccess() {
-    if (moduleId) api.listModuleAccess(moduleId).then(setAccess)
+    if (!moduleId) return
+    setAccessError(null)
+    api
+      .listModuleAccess(moduleId)
+      .then(setAccess)
+      .catch((err) => setAccessError(err instanceof ApiError ? err.message : 'Não foi possível carregar as permissões.'))
   }
+
+  useEffect(() => {
+    if (moduleId) reloadAccess()
+    else setAccess([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moduleId])
 
   async function handleTogglePublic() {
     if (!selectedModule) return
@@ -990,6 +998,12 @@ function PermissionsTab({
           </option>
         ))}
       </select>
+
+      {accessError && (
+        <p className="mb-4 text-[13px]" style={{ color: '#d43b3b' }}>
+          {accessError}
+        </p>
+      )}
 
       {moduleId && selectedModule && (
         <>
@@ -1302,12 +1316,17 @@ export function AdminPage() {
   const [equipmentError, setEquipmentError] = useState<string | null>(null)
   const [areas, setAreas] = useState<EquipmentArea[]>([])
   const [types, setTypes] = useState<EquipmentType[]>([])
+  // falha ao carregar uma das listas de topo: sem isto a aba ficava vazia,
+  // como se não houvesse nada cadastrado (lição 5)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const failed = (what: string) => (err: unknown) =>
+    setLoadError(err instanceof ApiError ? `${what}: ${err.message}` : `Não foi possível carregar ${what}.`)
 
   const reloadModules = () => {
-    if (canReadModules) api.listModules().then(setModules)
+    if (canReadModules) api.listModules().then(setModules).catch(failed('os módulos'))
   }
   const reloadUsers = () => {
-    if (canReadUsers) api.listUsers().then(setUsers)
+    if (canReadUsers) api.listUsers().then(setUsers).catch(failed('os usuários'))
   }
   const reloadEquipment = () => {
     setEquipmentError(null)
@@ -1317,10 +1336,10 @@ export function AdminPage() {
       .catch((err) => setEquipmentError(err instanceof ApiError ? err.message : 'Não foi possível carregar os equipamentos.'))
   }
   const reloadAreas = () => {
-    api.listEquipmentAreas().then(setAreas)
+    api.listEquipmentAreas().then(setAreas).catch(failed('as áreas'))
   }
   const reloadTypes = () => {
-    api.listEquipmentTypes().then(setTypes)
+    api.listEquipmentTypes().then(setTypes).catch(failed('os tipos de equipamento'))
   }
 
   useEffect(reloadModules, [])
@@ -1354,6 +1373,12 @@ export function AdminPage() {
           </button>
         ))}
       </div>
+
+      {loadError && (
+        <p className="mb-4 text-[13px]" style={{ color: '#d43b3b' }}>
+          {loadError}
+        </p>
+      )}
 
       {tab === 'Usuários' && <UsersTab users={users} onChange={reloadUsers} />}
       {tab === 'Grupos' && <GroupsTab users={users} />}
