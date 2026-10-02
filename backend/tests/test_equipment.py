@@ -389,3 +389,29 @@ def test_deleting_type_clears_it_from_equipment(super_admin_client):
 
     eq = super_admin_client.get("/equipment").json()[0]
     assert eq["type_id"] is None
+
+
+# ---------- renomear (nome de exibição) — Administração → Equipamentos ----------
+
+
+def test_rename_equipment_display_name_keeps_id_and_history(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    user_a_client.post("/equipment/re7s/logs", json={"description": "uso"})
+    r = super_admin_client.patch("/equipment/re7s", json={"display_name": "  Rock-Eval 7S  "})
+    assert r.status_code == 200
+    assert r.json()["display_name"] == "Rock-Eval 7S"  # espaços nas pontas removidos
+    assert r.json()["id"] == "re7s"
+    assert len(user_a_client.get("/equipment/re7s/logs").json()) == 1  # histórico intacto
+
+
+def test_equipment_name_cannot_be_blank(super_admin_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    assert super_admin_client.patch("/equipment/re7s", json={"display_name": "   "}).status_code == 400
+    assert super_admin_client.post("/equipment", json={"id": "leco", "display_name": " "}).status_code == 400
+    eq = next(e for e in super_admin_client.get("/equipment").json() if e["id"] == "re7s")
+    assert eq["display_name"] == "RE7S"
+
+
+def test_regular_user_cannot_rename_equipment(super_admin_client, user_a_client):
+    super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
+    assert user_a_client.patch("/equipment/re7s", json={"display_name": "Outro"}).status_code == 403

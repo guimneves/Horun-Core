@@ -712,6 +712,21 @@ function EquipmentTab({
     await rename(item.id, next)
   }
 
+  async function handleRenameEquipment(eq: Equipment) {
+    const raw = window.prompt(`Novo nome para "${eq.display_name}":`, eq.display_name)
+    if (raw === null) return
+    const next = raw.trim()
+    if (!next || next === eq.display_name) return
+    setError(null)
+    try {
+      // só o nome de exibição — o id (usado na URL e no histórico) continua o mesmo
+      await api.updateEquipment(eq.id, { display_name: next })
+      onChange()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Falha ao renomear o equipamento.')
+    }
+  }
+
   async function handleRenameEquipmentId(eq: Equipment) {
     const raw = window.prompt(
       `Novo id para "${eq.display_name}" (sem espaço, sem acento — é o que aparece na URL):`,
@@ -762,7 +777,14 @@ function EquipmentTab({
                 <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
                 <Td>{types.find((t) => t.id === eq.type_id)?.name ?? '—'}</Td>
                 <Td right>
-                  <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRenameEquipmentId(eq)}>
+                  <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRenameEquipment(eq)}>
+                    renomear
+                  </button>
+                  <button
+                    className="ml-3 text-xs"
+                    style={{ color: 'var(--color-text-muted)' }}
+                    onClick={() => handleRenameEquipmentId(eq)}
+                  >
                     renomear id
                   </button>
                   <button

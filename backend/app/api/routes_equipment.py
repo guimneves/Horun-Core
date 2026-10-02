@@ -303,9 +303,19 @@ def list_equipment(_user: CurrentUser, session: SessionDep):
     return [_out(e, last_used.get(e.id), reservations_week.get(e.id, 0)) for e in items]
 
 
+def _clean_display_name(name: str) -> str:
+    """Nome que aparece em toda a interface (cards, agenda, ficha RUE) — não
+    pode ficar vazio nem só com espaços."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Informe o nome do equipamento.")
+    return cleaned
+
+
 @router.post("/equipment", response_model=EquipmentOut)
 def create_equipment(payload: EquipmentIn, _admin: EquipmentManagerUser, session: SessionDep):
     equipment_id = _validate_equipment_id(payload.id)
+    display_name = _clean_display_name(payload.display_name)
     existing = session.get(Equipment, equipment_id)
     if existing is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um equipamento com esse id")
@@ -313,7 +323,7 @@ def create_equipment(payload: EquipmentIn, _admin: EquipmentManagerUser, session
     _check_type(session, payload.type_id)
     _check_module(session, payload.module_id)
     _check_voltage(payload.voltage)
-    equipment = Equipment(**{**payload.model_dump(), "id": equipment_id})
+    equipment = Equipment(**{**payload.model_dump(), "id": equipment_id, "display_name": display_name})
     session.add(equipment)
     session.commit()
     session.refresh(equipment)
@@ -327,7 +337,7 @@ def update_equipment(equipment_id: str, payload: EquipmentPatch, _admin: Equipme
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
 
     if payload.display_name is not None:
-        equipment.display_name = payload.display_name
+        equipment.display_name = _clean_display_name(payload.display_name)
     if payload.color is not None:
         equipment.color = payload.color
     if payload.description is not None:
