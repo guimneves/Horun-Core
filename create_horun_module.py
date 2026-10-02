@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gerador de módulo novo do Horun — copia module-template/ para uma pasta
 nova, substituindo os placeholders (__MODULE_ID__, __MODULE_NAME__,
-__MODULE_DESCRIPTION__, __DESIGN_SYSTEM_RELATIVE_PATH__) pelos valores
+__MODULE_DESCRIPTION__) pelos valores
 informados. Ver Prompt_Horun_Core.md (seção 3) para o contrato completo
 que o módulo gerado segue.
 
@@ -25,6 +25,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 TEMPLATE_DIR = HERE / "module-template"
 DESIGN_SYSTEM_DIR = HERE / "design-system"
+
+sys.path.insert(0, str(HERE / "scripts"))
+from vendor_design_system import vendor as vendor_design_system  # noqa: E402
 
 PLACEHOLDERS = ["__MODULE_ID__", "__MODULE_NAME__", "__MODULE_DESCRIPTION__"]
 
@@ -83,21 +86,10 @@ def collect_inputs(args: argparse.Namespace) -> dict[str, str]:
     }
 
 
-def relative_posix(target_dir: Path, from_subdir: str) -> str:
-    """Caminho relativo (barras normais, formato aceito pelo npm 'file:')
-    de <target_dir>/<from_subdir> até design-system/."""
-    base = target_dir / from_subdir
-    rel = Path(
-        __import__("os").path.relpath(DESIGN_SYSTEM_DIR, base)
-    )
-    return rel.as_posix()
-
-
 def replace_placeholders(text: str, values: dict[str, str]) -> str:
     text = text.replace("__MODULE_ID__", values["module_id"])
     text = text.replace("__MODULE_NAME__", values["module_name"])
     text = text.replace("__MODULE_DESCRIPTION__", values["description"])
-    text = text.replace("__DESIGN_SYSTEM_RELATIVE_PATH__", values["design_system_rel"])
     return text
 
 
@@ -128,10 +120,12 @@ def main() -> None:
     if target_dir.exists() and any(target_dir.iterdir()):
         sys.exit(f"Pasta de destino já existe e não está vazia: {target_dir}")
 
-    values["design_system_rel"] = relative_posix(target_dir, "frontend")
-
     target_dir.mkdir(parents=True, exist_ok=True)
     copy_and_fill(target_dir, values)
+    # design-system por CÓPIA dentro do módulo (frontend/vendor/), não por
+    # caminho relativo até o Core — o build Docker do módulo só enxerga o
+    # próprio repositório (ver scripts/vendor_design_system.py)
+    vendor_design_system(target_dir / "frontend")
 
     print()
     print(f"Módulo '{values['module_name']}' (id: {values['module_id']}) criado em:")
@@ -140,6 +134,8 @@ def main() -> None:
     print("Próximos passos:")
     print(f"  cd \"{target_dir}\\backend\" && python -m venv .venv && .venv\\Scripts\\activate && pip install -e \".[dev]\"")
     print(f"  cd \"{target_dir}\\frontend\" && npm install && npm run dev")
+    print("  (o design-system foi copiado para frontend/vendor/ — para atualizar depois:")
+    print(f"   python \"{HERE / 'scripts' / 'vendor_design_system.py'}\" \"{target_dir / 'frontend'}\")")
     print()
     print("Ver README.md gerado para o fluxo completo de desenvolvimento standalone.")
 

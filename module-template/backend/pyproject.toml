@@ -3,22 +3,26 @@ name = "__MODULE_ID__"
 version = "0.1.0"
 description = "Horun · __MODULE_NAME__ — módulo do Projeto Horun"
 requires-python = ">=3.11"
+# Versão EXATA, nunca faixa aberta (">="): o Dockerfile reinstala tudo do
+# PyPI a cada `docker compose up --build`. Uma versão nova do SQLModel já
+# derrubou o Horun Core em produção sem aviso. Para atualizar: mude aqui,
+# rode a suíte, só então suba. (Mesmas versões do Horun Core.)
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "sqlmodel>=0.0.22",
-    "pydantic>=2.9",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.3",
+    "sqlmodel==0.0.47",
+    "pydantic==2.13.4",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3",
-    "httpx>=0.27",
+    "pytest==9.1.1",
+    "httpx==0.28.1",
 ]
 # Fase 2: driver do PostgreSQL — só necessário na imagem Docker do
 # servidor, não no desenvolvimento local (SQLite embutido no Python).
 postgres = [
-    "psycopg[binary]>=3.1",
+    "psycopg[binary]==3.3.6",
 ]
 
 [tool.pytest.ini_options]

@@ -9,9 +9,11 @@ services:
   backend:
     build: ./backend
     environment:
+      # DEV_MODE = todo pedido é o usuário "admin" fixo, SEM login — por isso
+      # as portas só escutam na própria máquina (127.0.0.1)
       HORUN_DEV_MODE: "true"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
 
   frontend:
     build:
@@ -21,4 +23,9 @@ services:
         # "/m/__MODULE_ID__/" (ver Prompt_Horun_Modulo.md, seção 6).
         VITE_BASE: /
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
+
+# PRODUÇÃO (plugado no Core) — ver Prompt_Horun_Modulo.md, seção 9: sem
+# "ports:" nenhum, backend e frontend na horun-network com container_name
+# previsível, Postgres com volume nomeado e o serviço db-backup
+# (deploy/backup/pg_backup.sh).

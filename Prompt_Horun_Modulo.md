@@ -19,7 +19,10 @@ Siga o mesmo método já usado nos outros módulos do Horun: leia o manual/POP d
   README.md
   MODULE.md
   .gitignore
+  .gitattributes          # *.sh text eol=lf
   docker-compose.yml
+  deploy/
+    backup/pg_backup.sh   # backup do Postgres (seção 9)
   backend/
     pyproject.toml
     Dockerfile
@@ -34,18 +37,24 @@ Siga o mesmo método já usado nos outros módulos do Horun: leia o manual/POP d
       api/
         __init__.py
         routes_*.py
+      db/
+        session.py        # engine + migração defensiva (seção 7)
     tests/
   frontend/
     package.json
     vite.config.ts
     index.html
     tsconfig.json / tsconfig.app.json / tsconfig.node.json
+    vendor/
+      horun-design-system/  # cópia do design-system do Core (seção 6), se usar
     src/
       main.tsx
       App.tsx
       index.css
       ...
 ```
+
+O jeito mais rápido de começar com tudo isso certo é gerar o esqueleto a partir do Horun Core: `python create_horun_module.py` (usa o `module-template/`, já com banco, migração, testes, backup e design-system).
 
 ## 4. `MODULE.md` — manifesto do módulo
 
@@ -118,6 +127,10 @@ Os dois últimos existem desde 2026-10-01 e **não são obrigatórios**: um mód
 
 **Nomes reservados**: o Core descarta qualquer `X-Horun-User-Id`, `X-Horun-User`, `X-Horun-Role`, `X-Horun-Level` ou `X-Horun-Level-Name` que venha do navegador e injeta os verdadeiros. Outros cabeçalhos `X-Horun-*` do próprio módulo (ex. `X-Horun-Coordenador-Token` do Financeiro) passam normalmente. O cookie de sessão do Core (`horun_core_session`) **não** é repassado ao módulo. Isso só protege o módulo se ele **nunca for alcançável por fora do Core** — nenhuma porta publicada no host (regra do item 3).
 
+**Dependências com versão EXATA** no `pyproject.toml` (`fastapi==0.141.1`, nunca `fastapi>=0.115`). O Dockerfile reinstala tudo do PyPI a cada `docker compose up --build` — com faixa aberta, cada rebuild pode trazer uma versão nova sem ninguém saber. Isso já derrubou o Horun Core em produção (uma versão nova do SQLModel mudou o tratamento de datas). Para atualizar uma dependência: mude a versão, rode a suíte de testes, só então suba. Use as mesmas versões do `module-template` do Horun Core.
+
+**Segredos sem valor padrão**: nada de `os.environ.get("MODULE_SECRET_KEY", "dev-only-...")` que funcione em produção. Se a chave faltar (ou for a de exemplo) fora do modo dev, o módulo deve se recusar a subir — com uma chave conhecida, qualquer um forja sessões.
+
 **`Dockerfile`** (mesmo padrão em todo módulo):
 ```dockerfile
 FROM python:3.11-slim
@@ -160,6 +173,8 @@ body { font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
 
 Use essas variáveis CSS (`var(--color-primary)` etc.) em vez de cores fixas nos componentes — isso é o que permite os três temas funcionarem sem reescrever nada. Se o módulo precisar de cores adicionais específicas do seu domínio (ex. cores de status de um equipamento), defina-as como novos tokens, sem alterar os tokens genéricos acima.
 
+**Se você tem acesso ao Horun Core** (é o caso de quem mantém o Horun): em vez de colar os tokens acima, use o pacote `@horun/design-system` (tokens, `ThemeProvider`, `ThemeToggle`, `HorunFooter`) por **cópia dentro do módulo**: `python <Horun Core>/scripts/vendor_design_system.py <módulo>/frontend` gera `frontend/vendor/horun-design-system/` e aponta o `package.json` para `"file:./vendor/horun-design-system"` (`--check` avisa se a cópia ficou desatualizada). **Nunca** aponte para a pasta do Core (`"file:../../Horun Core/design-system"`): funciona na sua máquina e quebra o build Docker do servidor, que só enxerga o repositório do módulo. Não edite a cópia — mude no Core e rode o script de novo.
+
 **Persistência do tema**: `localStorage`, chave `"horun-theme"` (mesma chave em todo módulo — assim a escolha de tema persiste ao navegar entre módulos, já que tudo roda na mesma origem através do Core). Detecta `prefers-color-scheme` do sistema operacional só no primeiro acesso (sem preferência salva ainda).
 
 **Rodapé padrão**, em toda página: logo do laboratório (NQTR, IQ-UFRJ) + nome do módulo (formato "Horun · Nome") + autoria. **Nunca** exiba codinome interno — nem no rodapé, nem em lugar nenhum da interface (ver Prompt_Horun_Core.md, seção 2).
@@ -187,36 +202,88 @@ ARG VITE_BASE=/
 RUN npm run build -- --base=$VITE_BASE
 ```
 
+No `frontend/Dockerfile`, o healthcheck usa **`http://127.0.0.1:80/`**, nunca `localhost`: na imagem `nginx:alpine`, `localhost` resolve primeiro para IPv6 (`::1`) e o nginx padrão só escuta IPv4 — o container aparece "(unhealthy)" mesmo funcionando.
+
 O `docker-compose.yml` do módulo passa `VITE_BASE=/m/<id>/` nesse build arg, e o serviço do frontend entra na `horun-network` com um `container_name` previsível (ex. `amostras-frontend`) — é esse nome que o administrador do Core cadastra como `internal_frontend_url` do módulo. Sem esses três ajustes, o módulo continua funcionando perfeitamente sozinho (`VITE_BASE` default `/`) — só não pode ser aberto de dentro do Core ainda.
 
 ## 7. Banco de dados — migração defensiva (obrigatório)
 
-`SQLModel.metadata.create_all(engine)` **só cria tabela que não existe — nunca adiciona coluna a uma tabela que já existe**. Se um campo novo entra num modelo depois que o banco de produção já foi criado, toda consulta àquela tabela quebra com `UndefinedColumn` e o backend entra em loop de reinício. Já derrubou os módulos Amostras e Reagentes em produção mais de uma vez. Use este padrão desde o primeiro commit (`app/core/db.py`):
+`SQLModel.metadata.create_all(engine)` **só cria tabela que não existe — nunca adiciona coluna a uma tabela que já existe**. Se um campo novo entra num modelo depois que o banco de produção já foi criado, toda consulta àquela tabela quebra com `UndefinedColumn` e o backend entra em loop de reinício. Já derrubou os módulos Amostras e Reagentes em produção mais de uma vez.
+
+A migração precisa funcionar **no Postgres de produção**, não só no SQLite de desenvolvimento — o RE7S chegou a ter migrações que só rodavam no SQLite (usavam `PRAGMA` e saíam cedo fora dele). Use exatamente este padrão desde o primeiro commit (`app/db/session.py` — já pronto no `module-template`):
 
 ```python
 from sqlalchemy import inspect
 
-def _ensure_column(table: str, column: str, ddl_type: str) -> None:
-    existing = {c["name"] for c in inspect(engine).get_columns(table)}
-    if column in existing:
+_PG_TYPES = {"DATETIME": "TIMESTAMP"}
+_PG_BOOL_DEFAULTS = {"0": "FALSE", "1": "TRUE"}
+
+def add_column_ddl(dialect, table, column, ddl_type, default_sql=None):
+    quote = dialect.identifier_preparer.quote  # aspas: "user" é reservada no Postgres
+    if dialect.name == "postgresql":
+        if ddl_type.upper() == "BOOLEAN" and default_sql is not None:
+            default_sql = _PG_BOOL_DEFAULTS.get(default_sql.strip(), default_sql)
+        ddl_type = _PG_TYPES.get(ddl_type.upper(), ddl_type)
+    stmt = f"ALTER TABLE {quote(table)} ADD COLUMN {quote(column)} {ddl_type}"
+    return stmt + (f" DEFAULT {default_sql}" if default_sql is not None else "")
+
+def _ensure_column(table, column, ddl_type, default_sql=None):
+    inspector = inspect(engine)
+    if not inspector.has_table(table):
+        return  # tabela nova: o create_all já cria com todas as colunas
+    if column in {c["name"] for c in inspector.get_columns(table)}:
         return
     with engine.begin() as conn:
-        conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
+        conn.exec_driver_sql(add_column_ddl(engine.dialect, table, column, ddl_type, default_sql))
 
-def create_db_and_tables() -> None:
+def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
-    # uma linha por coluna adicionada a um modelo depois do primeiro deploy —
-    # cresce com o tempo, mas nunca quebra. Ex.:
+    # uma linha por coluna adicionada a um modelo depois do primeiro deploy:
     # _ensure_column("sample", "observacoes", "VARCHAR")
+    # _ensure_column("sample", "conferida", "BOOLEAN", default_sql="0")
 ```
 
-**Regra**: toda vez que somar um campo num modelo que já tem tabela em produção, some a linha de `_ensure_column` **no mesmo commit**. A migração roda no startup — só vale depois que o backend reinicia de verdade.
+**Regra**: toda vez que somar um campo num modelo que já tem tabela em produção, some a linha de `_ensure_column` **no mesmo commit**. A migração roda no startup, em qualquer banco — só vale depois que o backend reinicia de verdade. Teste o SQL do Postgres sem precisar de um Postgres: `add_column_ddl(postgresql.dialect(), ...)` (exemplo em `module-template/backend/tests/test_migrations.py`).
 
 ## 8. O que entregar ao final
 
 1. Código completo do backend e frontend seguindo a estrutura acima.
 2. `README.md` explicando como rodar em modo standalone (`HORUN_DEV_MODE=true` + `uvicorn` + `npm run dev`), igual ao padrão dos módulos já existentes do Horun.
-3. Testes automatizados do backend cobrindo a lógica de negócio principal (pytest).
+3. Testes automatizados do backend cobrindo a lógica de negócio principal (pytest), incluindo as migrações (seção 7).
 4. Nenhuma senha, chave ou segredo real commitado — variáveis de ambiente com um `.env.example` de modelo.
+5. `pyproject.toml` com versões exatas (seção 5).
 
 Depois de pronto, o mantenedor do Horun (usando Claude Code, com acesso ao restante do projeto) cuida da parte de "plugar" — cadastrar o módulo no painel de Administração do Core (a partir dos dados do `MODULE.md`, com a URL interna do backend e do frontend, ex. `http://<id>-backend:8000` e `http://<id>-frontend:80`), configurar o `docker-compose.yml` do servidor, e validar permissões. Você não precisa se preocupar com essa parte.
+
+## 9. Produção (quando o módulo for plugado no Core)
+
+O mantenedor monta isso, mas o módulo precisa permitir:
+
+- **Nenhuma porta publicada** (`ports:`) no compose de produção — backend e frontend só na rede `horun-network`, com `container_name` previsível (`<id>-backend`, `<id>-frontend`). A identidade por cabeçalho só é segura porque ninguém alcança o módulo sem passar pelo Core.
+- No compose de **desenvolvimento** (com `HORUN_DEV_MODE=true`, que é "admin sem login"), portas só em `127.0.0.1` (`"127.0.0.1:8000:8000"`), nunca abertas para a rede do laboratório.
+- **Postgres com volume nomeado** e **backup automático**: o serviço `db-backup` (mesma imagem `postgres:16-alpine`, roda `deploy/backup/pg_backup.sh`, já no `module-template`) faz um dump verificado por dia e guarda 30 dias em `BACKUP_DIR`, uma pasta fora do Docker:
+
+```yaml
+  db-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: <usuario>
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: <banco>
+      BACKUP_PREFIX: <id>
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      - ./deploy/backup/pg_backup.sh:/pg_backup.sh:ro
+    entrypoint: ["/bin/sh", "/pg_backup.sh"]
+```
+
+- **`.gitattributes` com `*.sh text eol=lf`**: os scripts rodam dentro de containers Linux; no Windows, o git converteria para CRLF e o `sh` quebraria.
+
+Restauração e detalhes: `Prompt_Horun_Core.md`, seção 9.4.

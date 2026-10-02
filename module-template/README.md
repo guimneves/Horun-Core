@@ -34,3 +34,11 @@ Com `HORUN_DEV_MODE=true`, o backend usa um usuário fixo (admin de desenvolvime
 1. Remover `HORUN_DEV_MODE` do ambiente de produção — o backend passa a exigir identidade vinda do Core.
 2. Adicionar o serviço deste módulo ao `docker-compose.yml` do servidor (backend sem porta exposta ao host — só alcançável pelo Core, mesma regra do RE7S).
 3. O administrador cadastra o módulo no painel de Administração do Core, a partir dos dados do `MODULE.md` (o cadastro é manual — o Core não lê o arquivo sozinho).
+
+## Regras que já vêm prontas neste esqueleto (não desfaça)
+
+- **Dependências com versão exata** em `backend/pyproject.toml` — para atualizar, mude a versão, rode `pytest`, só então suba.
+- **Migração defensiva** em `backend/app/db/session.py`: todo campo novo num modelo que já tem tabela em produção ganha uma linha de `_ensure_column` em `_run_migrations`, **no mesmo commit**.
+- **Design-system por cópia** em `frontend/vendor/horun-design-system/` — não edite; para atualizar, rode `python <Horun Core>/scripts/vendor_design_system.py frontend` (com `--check` só confere).
+- **Backup do Postgres** em produção: serviço `db-backup` com `deploy/backup/pg_backup.sh` (ver `Prompt_Horun_Modulo.md`, seção 9).
+- Portas do compose de desenvolvimento só em `127.0.0.1` (o modo dev não tem login).
