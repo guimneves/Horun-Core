@@ -278,6 +278,8 @@ class Event(SQLModel, table=True):
     group_id: Optional[int] = Field(default=None, foreign_key="group.id", index=True)
     created_by_id: int = Field(foreign_key="user.id", index=True)
     created_at: datetime = Field(default_factory=utcnow)
+    # lembrete da véspera já enviado aos membros do grupo (services/calendar_notify.py)
+    reminder_sent_at: Optional[NaiveDatetime] = None  # horário local do laboratório
 
 
 class EquipmentArea(SQLModel, table=True):
@@ -382,3 +384,5 @@ class Reservation(SQLModel, table=True):
     start_at: NaiveDatetime
     end_at: NaiveDatetime
     created_at: datetime = Field(default_factory=utcnow)
+    # lembrete de 1 h antes já enviado a quem reservou (services/calendar_notify.py)
+    reminder_sent_at: Optional[NaiveDatetime] = None  # horário local do laboratório

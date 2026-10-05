@@ -135,6 +135,10 @@ def _run_migrations() -> None:
     _backfill_null_text("module", ("notify_token_hash",))
     _ensure_column("notification", "module_id", "VARCHAR")
 
+    # --- lembretes da Agenda (services/calendar_notify.py) ---
+    _ensure_column("event", "reminder_sent_at", "TIMESTAMP")
+    _ensure_column("reservation", "reminder_sent_at", "TIMESTAMP")
+
     if is_pg:
         # SQLite não suporta esses ALTER, mas também não precisa: dev sempre
         # recria o arquivo do zero a partir do modelo atual.

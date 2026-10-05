@@ -15,6 +15,7 @@ from app.api.deps import CurrentUser, SessionDep
 from app.core.permissions import can_moderate, is_coordinator_or_above
 from app.core.groups import can_see_group, member_group_ids
 from app.db.models import Event, Group, User
+from app.services.calendar_notify import lab_now, notify_group_event
 
 router = APIRouter(tags=["events"])
 
@@ -131,6 +132,8 @@ def create_event(payload: EventIn, user: CurrentUser, session: SessionDep):
         created_by_id=user.id,
     )
     session.add(event)
+    session.flush()
+    notify_group_event(session, event, "nova", user)  # evento de grupo: avisa os membros
     session.commit()
     session.refresh(event)
     return _out(session, event, user)
@@ -145,13 +148,18 @@ def update_event(event_id: int, payload: EventIn, user: CurrentUser, session: Se
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para editar este evento")
     if payload.end_at < payload.start_at:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim do evento não pode ser antes do início")
+    before = (event.title, event.location, event.start_at, event.end_at, event.all_day)
     event.title = payload.title.strip() or event.title
     event.description = payload.description.strip()
     event.location = payload.location.strip()
+    if payload.start_at != event.start_at:
+        event.reminder_sent_at = None  # novo horário, novo lembrete
     event.start_at = payload.start_at
     event.end_at = payload.end_at
     event.all_day = payload.all_day
     session.add(event)
+    if before != (event.title, event.location, event.start_at, event.end_at, event.all_day):
+        notify_group_event(session, event, "alterada", user)  # só mudança que importa a quem vai
     session.commit()
     session.refresh(event)
     return _out(session, event, user)
@@ -164,6 +172,8 @@ def delete_event(event_id: int, user: CurrentUser, session: SessionDep):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento não encontrado")
     if not _can_manage_event(session, event, user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para remover este evento")
+    if event.end_at > lab_now():
+        notify_group_event(session, event, "cancelada", user)  # evento passado: ninguém precisa saber
     session.delete(event)
     session.commit()
     return {"ok": True}

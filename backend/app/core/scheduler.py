@@ -10,7 +10,11 @@ import os
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from sqlmodel import Session
 
+from app.db.session import engine
+from app.services.calendar_notify import send_due_reminders
 from app.services.reminders import send_weekly_birthday_reminder
 
 log = logging.getLogger("horun.scheduler")
@@ -25,6 +29,16 @@ def _weekly_birthday_job() -> None:
             log.info("Lembrete semanal de aniversários enviado para %d usuários.", n)
     except Exception:  # noqa: BLE001 — job não pode derrubar o agendador
         log.exception("Falha no lembrete semanal de aniversários.")
+
+
+def _calendar_reminders_job() -> None:
+    try:
+        with Session(engine) as session:
+            sent = send_due_reminders(session)
+        if any(sent.values()):
+            log.info("Lembretes da Agenda: %s", sent)
+    except Exception:  # noqa: BLE001 — job não pode derrubar o agendador
+        log.exception("Falha nos lembretes da Agenda.")
 
 
 def start_scheduler() -> None:
@@ -44,8 +58,17 @@ def start_scheduler() -> None:
         misfire_grace_time=6 * 3600,  # se o servidor estava fora do ar no horário, roda ao voltar
         replace_existing=True,
     )
+    # Lembretes da Agenda: reuniões de grupo (véspera) e reservas (1 h antes).
+    _scheduler.add_job(
+        _calendar_reminders_job,
+        IntervalTrigger(minutes=15),
+        id="calendar_reminders",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
     _scheduler.start()
-    log.info("Agendador iniciado (lembrete semanal de aniversários: seg 07:30).")
+    log.info("Agendador iniciado (aniversários: seg 07:30; lembretes da Agenda: a cada 15 min).")
 
 
 def shutdown_scheduler() -> None:

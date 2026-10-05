@@ -14,6 +14,7 @@ from sqlmodel import select
 from app.api.deps import CurrentUser, SessionDep
 from app.core.permissions import can_moderate
 from app.db.models import Equipment, Reservation, User
+from app.services.calendar_notify import notify_reservation
 
 router = APIRouter(tags=["reservations"])
 
@@ -122,6 +123,8 @@ def create_reservation(payload: ReservationIn, user: CurrentUser, session: Sessi
         end_at=payload.end_at,
     )
     session.add(reservation)
+    session.flush()
+    notify_reservation(session, reservation, "confirmada", user)  # e-mail de confirmação
     session.commit()
     session.refresh(reservation)
     return _out(reservation, user)
@@ -150,12 +153,19 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
             status.HTTP_409_CONFLICT, "Já existe uma reserva desse equipamento nesse horário"
         )
 
+    moved = (reservation.equipment_id, reservation.start_at, reservation.end_at) != (
+        payload.equipment_id, payload.start_at, payload.end_at
+    )
+    if payload.start_at != reservation.start_at:
+        reservation.reminder_sent_at = None  # novo horário, novo lembrete
     reservation.equipment_id = payload.equipment_id
     reservation.start_at = payload.start_at
     reservation.end_at = payload.end_at
     if payload.title is not None:
         reservation.title = payload.title
     session.add(reservation)
+    if moved:
+        notify_reservation(session, reservation, "reagendada", user)  # avisa se foi outra pessoa
     session.commit()
     session.refresh(reservation)
     return _out(reservation, user)
@@ -168,6 +178,7 @@ def delete_reservation(reservation_id: int, user: CurrentUser, session: SessionD
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reserva não encontrada")
     if reservation.user_id != user.id and not can_moderate(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Só quem reservou ou o administrador máximo pode cancelar")
+    notify_reservation(session, reservation, "cancelada", user)  # avisa se foi outra pessoa
     session.delete(reservation)
     session.commit()
     return {"ok": True}
