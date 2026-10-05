@@ -130,6 +130,11 @@ def _run_migrations() -> None:
     _ensure_column("equipmentlog", "verified_at", "TIMESTAMP")
     _backfill_null_text("equipmentlog", ("purpose", "experiment_code"))
 
+    # --- notificações pedidas por módulos (routes_module_notify.py) ---
+    _ensure_column("module", "notify_token_hash", "VARCHAR DEFAULT ''")
+    _backfill_null_text("module", ("notify_token_hash",))
+    _ensure_column("notification", "module_id", "VARCHAR")
+
     if is_pg:
         # SQLite não suporta esses ALTER, mas também não precisa: dev sempre
         # recria o arquivo do zero a partir do modelo atual.

@@ -71,7 +71,10 @@ export function NotificationsBell() {
 
   function openNotification(n: Notification) {
     setOpen(false)
-    navigate(n.link || '/')
+    // aviso de módulo: cada módulo é uma SPA própria em /m/<id>/ — carregamento
+    // de página real, não rota do Core (mesmo padrão da barra lateral)
+    if (n.link?.startsWith('/m/')) window.location.href = n.link
+    else navigate(n.link || '/')
   }
 
   if (!user) return null

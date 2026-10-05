@@ -530,6 +530,62 @@ function ModuleContributorsCell({ moduleId, users, onError }: { moduleId: string
   )
 }
 
+/** Chave com que o backend do módulo pede ao Core para avisar pessoas
+ * (sininho + e-mail) — Prompt_Horun_Modulo.md, seção 11. O valor só
+ * aparece uma vez, logo depois de gerar. */
+function ModuleNotifyCell({ module, onChange, onError }: { module: ModuleFull; onChange: () => void; onError: (msg: string) => void }) {
+  const [token, setToken] = useState<string | null>(null)
+
+  async function generate() {
+    if (module.has_notify_token && !confirm(`Trocar a chave de notificação de "${module.display_name}"? A atual deixa de funcionar até o módulo receber a nova.`)) return
+    try {
+      setToken((await api.createModuleNotifyToken(module.id)).token)
+      onChange()
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Falha ao gerar a chave.')
+    }
+  }
+
+  async function revoke() {
+    if (!confirm(`Desligar as notificações de "${module.display_name}"?`)) return
+    try {
+      await api.revokeModuleNotifyToken(module.id)
+      setToken(null)
+      onChange()
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Falha ao desligar.')
+    }
+  }
+
+  return (
+    <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+      {token ? (
+        <div className="max-w-xs">
+          <p className="mb-1">Copie agora — não aparece de novo. No servidor do módulo:</p>
+          <code className="block break-all rounded p-1.5" style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            HORUN_NOTIFY_TOKEN={token}
+          </code>
+          <button className="mt-1" style={{ color: 'var(--color-primary)' }} onClick={() => navigator.clipboard?.writeText(token)}>
+            copiar
+          </button>
+        </div>
+      ) : (
+        <span>{module.has_notify_token ? 'ligadas' : 'desligadas'}</span>
+      )}
+      <div className="mt-1 flex gap-3">
+        <button style={{ color: 'var(--color-primary)' }} onClick={generate}>
+          {module.has_notify_token ? 'trocar chave' : 'gerar chave'}
+        </button>
+        {module.has_notify_token && (
+          <button style={{ color: '#d43b3b' }} onClick={revoke}>
+            desligar
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users: CurrentUser[]; onChange: () => void }) {
   const [id, setId] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -570,6 +626,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
             <Th>Módulo</Th>
             <Th>URL interna</Th>
             <Th>Contribuidores</Th>
+            <Th>Notificações</Th>
             <Th right>Ações</Th>
           </tr>
         </thead>
@@ -589,6 +646,9 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
               </Td>
               <Td>
                 <ModuleContributorsCell moduleId={m.id} users={users} onError={setError} />
+              </Td>
+              <Td>
+                <ModuleNotifyCell module={m} onChange={onChange} onError={setError} />
               </Td>
               <Td right>
                 <button

@@ -31,6 +31,10 @@ class Settings:
     smtp_pass: str = os.environ.get("SMTP_PASS", "")
     smtp_from: str = os.environ.get("SMTP_FROM", "") or os.environ.get("SMTP_USER", "")
 
+    # Endereço do Horun visto de fora (ex. "http://192.168.0.80"), para o
+    # link "Abrir no Horun" dos e-mails. Vazio = e-mail sai sem link.
+    public_url: str = os.environ.get("CORE_PUBLIC_URL", "").rstrip("/")
+
     @property
     def email_enabled(self) -> bool:
         return bool(self.smtp_host and self.smtp_from)

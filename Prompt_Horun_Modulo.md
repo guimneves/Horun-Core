@@ -299,3 +299,42 @@ Se o módulo precisa ler ou gravar arquivos que vivem no PC de um equipamento (e
 - **Rede: porta estreita própria, nunca pelo gateway nem pelo backend exposto.** O gateway `/m/<id>/` exige login de usuário (o agente não tem) e o backend confia nos cabeçalhos de identidade (seção 5) — expor a porta dele deixaria qualquer um se passar por qualquer usuário. Cada módulo com agente publica **uma porta que só repassa as 3 rotas do agente** — `/agent/enroll`, `/agent/tasks`, `/agent/tasks/{id}/result` (autenticadas pelo token do dispositivo) — e responde 404 ao resto: um segundo `server {}` no nginx do frontend (modelo: `RE7S-Horun/frontend/nginx.conf`, `listen 8001`, com `client_max_body_size 50m`). Se a API do módulo vive sob `/api`, a porta repassa para `/api/agent/...`. Portas: RE7S 8001, Financeiro 8002, próximos 8003... (combinar com o mantenedor). Conferência depois do deploy: `curl http://<servidor>:<porta>/agent/enroll-codes` → **404**.
 - **Administração** (gerar código de instalação, ver/revogar instalações) é rota de admin, pelo Core. Há um painel pronto para copiar: `RE7S-Horun/frontend/src/components/AgentPanel.tsx` + `api/agent.ts`.
 - **No PC do equipamento**: um mesmo agente atende vários módulos (`servers` no `config.json`), cada pasta com permissão `read`, `read-move` ou `read-write`. Instalação em `Agent-Horun/install/README.md`.
+
+## 11. Notificações e e-mail — pelo Core (opcional, recomendado)
+
+O módulo **não** guarda e-mail de ninguém nem configura SMTP: ele recebe só `X-Horun-User-Id` e o nome (seção 5). Para avisar pessoas, o **backend** do módulo pede ao Core, que cria o aviso no **sininho** (com link para dentro do módulo) e manda **e-mail** a quem tem e-mail cadastrado e não desligou os e-mails em "Meu perfil".
+
+- **Chave do módulo**: o administrador gera na aba **Admin → Módulos → Notificações** ("gerar chave"); o valor aparece uma vez. No servidor do módulo: `HORUN_CORE_URL=http://horun-core-backend:8000` e `HORUN_NOTIFY_TOKEN=<chave>`. **Sem as duas variáveis, o módulo segue funcionando, só sem avisos** (nunca recuse subir por isso).
+- **Chamada** (servidor → servidor, pela `horun-network`):
+
+  ```
+  POST {HORUN_CORE_URL}/internal/modules/<id>/notify
+  Authorization: Bearer <HORUN_NOTIFY_TOKEN>
+  {"user_ids": [12], "levels": [1, 2], "subject": "Compra aguardando autorização",
+   "text": "Processo 2026-123 — R$ ...", "link": "/compras/45", "email": true}
+  ```
+
+  `user_ids` (ids do Core, os do cabeçalho) e `levels` (1 admin, 2 coordenador, 3 pesquisador, 4 técnico, 5 IC) somam os destinatários; o Core **descarta quem não tem acesso ao módulo**. `link` é o caminho **dentro** do módulo (o Core monta `/m/<id>/...`). `email: false` = só o sininho (avisos de rotina). Resposta: `{"notified": n, "emailed": m}`; chave errada → 401.
+- **No módulo**: um `app/core/notify.py` com uma função `notify(subject, text="", link="", user_ids=(), levels=(), email=True)` que dispara a chamada **em segundo plano** (thread ou `BackgroundTasks`), com timeout curto, e **nunca** derruba a requisição se o Core estiver fora (só registra no log). Nos testes, substitua a função (monkeypatch) e confira o que seria enviado.
+- **O que avisar**: eventos que pedem ação de alguém (algo esperando aprovação, prazo, estoque/saldo no limite, resultado pronto para quem pediu) — não cada clique. O texto do e-mail é texto simples, em português, e diz o que fazer; **não** ponha dados sensíveis além do necessário (o e-mail sai do servidor).
+
+## 12. Manual de instruções — aba "Manual" (obrigatório)
+
+Todo módulo tem uma aba **Manual** na barra lateral (rota `/manual`, sempre a última, visível a todos que entram no módulo), com o passo a passo de uso em linguagem simples:
+
+- Começa com "para que serve" e "quem pode fazer o quê" (papéis/permissões do módulo); depois uma seção por tarefa ("Como cadastrar...", "Como aprovar..."), com os nomes dos botões **em negrito**, exatamente como aparecem na tela; termina com "Dúvidas frequentes" e com quem procurar.
+- Índice no topo com âncoras; busca simples por texto é bem-vinda.
+- Botão **"Imprimir / salvar PDF"** (`window.print()`) com CSS de impressão que esconde barra lateral e cabeçalho — o PDF sai da própria página, sem um gerador separado para manter.
+- O conteúdo fica num arquivo próprio do frontend (ex. `src/manual/content.tsx`), separado do layout, para ser fácil de atualizar. **Mudou uma tela, atualize o manual no mesmo commit.**
+- Sem dados reais (nomes, valores) nos exemplos.
+
+## 13. Interface no celular (obrigatório)
+
+Os módulos são usados no laboratório pelo celular. Largura de referência: **375 px** (iPhone SE/Android pequeno); ponto de quebra `md` (768 px).
+
+- `<meta name="viewport" content="width=device-width, initial-scale=1">` no `index.html`.
+- **Barra lateral vira gaveta** abaixo de `md`: uma barra no topo com o botão ☰ e o nome do módulo; a gaveta abre por cima com fundo escurecido e fecha ao escolher um item, ao tocar fora ou com `Esc`.
+- **Nenhuma rolagem horizontal da página** a 375 px. Tabelas largas: dentro de um contêiner com `overflow-x: auto`, e as listas principais do dia a dia viram **cartões** (uma linha da tabela = um cartão) abaixo de `md`.
+- Formulários em uma coluna; janelas (modais) ocupam a largura toda com rolagem interna; botões e links com **área de toque ≥ 40 px**; campos com fonte **≥ 16 px** (o iPhone dá zoom em campos menores).
+- Ações principais alcançáveis sem pinça/zoom; nada depende de passar o mouse por cima (`hover`).
+- Conferir no navegador em 375×812 (modo dispositivo) as telas principais antes de entregar.

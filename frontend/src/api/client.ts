@@ -115,6 +115,8 @@ export interface ModuleFull {
   internal_frontend_url: string
   public: boolean
   unlisted: boolean
+  /** O módulo tem chave para pedir notificações ao Core (sininho + e-mail). */
+  has_notify_token: boolean
 }
 
 export interface ModuleAccessEntry {
@@ -383,13 +385,17 @@ export const api = {
   dashboardModules: () => request<ModuleStatus[]>('/dashboard/modules'),
 
   listModules: () => request<ModuleFull[]>('/modules'),
-  createModule: (payload: Omit<ModuleFull, never>) =>
+  createModule: (payload: Omit<ModuleFull, 'has_notify_token'>) =>
     request<ModuleFull>('/modules', { method: 'POST', body: JSON.stringify(payload) }),
   // O backend espera o ModuleIn inteiro no PATCH (não é um merge parcial)
   // — id vai no corpo também, mesmo sendo ignorado (a rota usa o da URL).
   updateModule: (moduleId: string, payload: ModuleFull) =>
     request<ModuleFull>(`/modules/${encodeURIComponent(moduleId)}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   deleteModule: (moduleId: string) => request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}`, { method: 'DELETE' }),
+  createModuleNotifyToken: (moduleId: string) =>
+    request<{ token: string }>(`/modules/${encodeURIComponent(moduleId)}/notify-token`, { method: 'POST' }),
+  revokeModuleNotifyToken: (moduleId: string) =>
+    request<{ ok: boolean }>(`/modules/${encodeURIComponent(moduleId)}/notify-token`, { method: 'DELETE' }),
   setModulePublic: (moduleId: string, isPublic: boolean) =>
     request<ModuleFull>(`/modules/${encodeURIComponent(moduleId)}/public`, { method: 'PATCH', body: JSON.stringify({ public: isPublic }) }),
   setModuleUnlisted: (moduleId: string, unlisted: boolean) =>

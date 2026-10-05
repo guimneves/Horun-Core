@@ -140,6 +140,10 @@ class Module(SQLModel, table=True):
     # aplicação da permissão em si (`/m/{id}/...` já bloqueia de qualquer
     # jeito) — é só sobre aparecer ou não na listagem.
     unlisted: bool = Field(default=False)
+    # Chave com que o BACKEND do módulo pede ao Core para notificar pessoas
+    # (sininho + e-mail) — routes_module_notify.py. Guardada só como hash
+    # SHA-256; o valor aparece uma vez, ao gerar. Vazia = módulo não notifica.
+    notify_token_hash: str = Field(default="")
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -246,10 +250,11 @@ class Notification(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)  # destinatário
-    kind: str  # "mention" | "reply"
+    kind: str  # "mention" | "reply" | "module"
     text: str  # mensagem já pronta pra exibir
     link: str = "/"  # pra onde levar ao clicar
     actor_id: Optional[int] = Field(default=None, foreign_key="user.id")  # quem disparou
+    module_id: Optional[str] = None  # kind "module": qual módulo pediu o aviso
     read: bool = Field(default=False, index=True)
     created_at: datetime = Field(default_factory=utcnow)
 

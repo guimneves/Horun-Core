@@ -73,6 +73,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      # Endereço do Horun visto de fora — link "Abrir no Horun" dos e-mails
+      # pedidos pelos módulos (routes_module_notify.py). Vazio = sem link.
+      CORE_PUBLIC_URL: ${CORE_PUBLIC_URL:-}
     networks:
       - default
       - horun-network

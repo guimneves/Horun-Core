@@ -63,6 +63,7 @@ class ModuleOut(BaseModel):
     internal_frontend_url: str
     public: bool
     unlisted: bool
+    has_notify_token: bool = False  # o módulo pode pedir notificações (routes_module_notify.py)
 
 
 class ModuleStatusOut(BaseModel):
@@ -91,6 +92,7 @@ def _out(m: Module) -> ModuleOut:
         internal_frontend_url=m.internal_frontend_url or "",
         public=bool(m.public),
         unlisted=bool(m.unlisted),
+        has_notify_token=bool(m.notify_token_hash),
     )
 
 
