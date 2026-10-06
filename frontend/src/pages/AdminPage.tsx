@@ -465,6 +465,77 @@ function ModuleIconInput({ module, onChange, onError }: { module: ModuleFull; on
   )
 }
 
+/** Nome público, descrição e URLs internas do módulo, editáveis no lugar —
+ * o id não muda (vai na URL /m/<id>/ e nas permissões). Corrigir uma URL
+ * aqui evita remover e cadastrar de novo. */
+function ModuleNameCell({ module, onChange, onError }: { module: ModuleFull; onChange: () => void; onError: (msg: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState(module)
+  const [saving, setSaving] = useState(false)
+  const field = (key: 'display_name' | 'description' | 'internal_base_url' | 'internal_frontend_url', label: string, placeholder = '') => (
+    <label className="block text-xs" style={{ color: 'var(--color-text-muted)' }}>
+      {label}
+      <input
+        value={form[key]}
+        placeholder={placeholder}
+        onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+        className="mt-0.5 block w-full rounded-lg px-2 py-1 text-sm outline-none"
+        style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
+      />
+    </label>
+  )
+
+  async function save() {
+    setSaving(true)
+    try {
+      await api.updateModule(module.id, form)
+      setEditing(false)
+      onChange()
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : 'Falha ao salvar o módulo.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <span className="font-medium">{module.display_name}</span>
+        <code className="ml-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          {module.id}
+        </code>
+        <button
+          className="ml-2 text-xs"
+          style={{ color: 'var(--color-primary)' }}
+          onClick={() => {
+            setForm(module)
+            setEditing(true)
+          }}
+        >
+          editar
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="min-w-64 space-y-1.5">
+      {field('display_name', 'Nome público')}
+      {field('description', 'Descrição')}
+      {field('internal_base_url', 'URL interna (backend)', 'http://<container>:8000')}
+      {field('internal_frontend_url', 'URL interna (frontend)', 'http://<container>:80')}
+      <div className="flex gap-3 pt-0.5 text-xs">
+        <button style={{ color: 'var(--color-primary)' }} disabled={saving || !form.display_name.trim()} onClick={save}>
+          {saving ? 'salvando…' : 'salvar'}
+        </button>
+        <button style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
+          cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function ModuleContributorsCell({ moduleId, users, onError }: { moduleId: string; users: CurrentUser[]; onError: (msg: string) => void }) {
   const [contributors, setContributors] = useState<ModuleContributor[]>([])
   const [adding, setAdding] = useState('')
@@ -637,7 +708,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
                 <ModuleIconInput module={m} onChange={onChange} onError={setError} />
               </Td>
               <Td>
-                <span className="font-medium">{m.display_name}</span>
+                <ModuleNameCell module={m} onChange={onChange} onError={setError} />
               </Td>
               <Td>
                 <code className="text-xs" style={{ color: 'var(--color-text-muted)' }}>

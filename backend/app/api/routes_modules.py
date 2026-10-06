@@ -120,7 +120,16 @@ def update_module(module_id: str, payload: ModuleIn, _admin: ModuleAdminUser, se
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
-    for field, value in payload.model_dump().items():
+    data = payload.model_dump()
+    # editar pela tela (Admin → Módulos → editar): nome obrigatório e sem
+    # espaços sobrando nas URLs — um espaço no fim já deixou módulo "offline"
+    data["display_name"] = (data.get("display_name") or "").strip()
+    if not data["display_name"]:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "O módulo precisa de um nome público")
+    for key in ("internal_base_url", "internal_frontend_url", "health_path", "description"):
+        data[key] = (data.get(key) or "").strip()
+    data["health_path"] = data["health_path"] or "/health"
+    for field, value in data.items():
         if field == "id":
             continue
         setattr(module, field, value)

@@ -298,3 +298,20 @@ def test_dashboard_unexpected_checker_error_is_offline(super_admin_client, monke
     r = super_admin_client.get("/dashboard/modules")
     assert r.status_code == 200
     assert r.json()[0]["status"] == "offline"
+
+
+def test_edit_module_name_and_urls(super_admin_client, user_a_client):
+    _register_module(super_admin_client)
+    edited = {
+        "id": "re7s", "display_name": "  Rock-Eval  ", "description": "x", "icon": "🪨",
+        "internal_base_url": " http://re7s-backend:8000 ", "health_path": "", "internal_frontend_url": "http://re7s-frontend:80 ",
+    }
+    assert user_a_client.patch("/modules/re7s", json=edited).status_code == 403
+    r = super_admin_client.patch("/modules/re7s", json=edited)
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["display_name"] == "Rock-Eval"  # espaços somem
+    assert out["internal_base_url"] == "http://re7s-backend:8000"
+    assert out["internal_frontend_url"] == "http://re7s-frontend:80"
+    assert out["health_path"] == "/health"
+    assert super_admin_client.patch("/modules/re7s", json={**edited, "display_name": "  "}).status_code == 422
