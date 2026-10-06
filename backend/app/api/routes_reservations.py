@@ -14,7 +14,7 @@ from sqlmodel import select
 from app.api.deps import CurrentUser, SessionDep
 from app.core.permissions import can_moderate
 from app.db.models import Equipment, Reservation, User
-from app.services.calendar_notify import notify_reservation
+from app.services.calendar_notify import lab_now, notify_reservation
 
 router = APIRouter(tags=["reservations"])
 
@@ -101,10 +101,23 @@ def list_reservations(
     return out
 
 
+def _check_bookable(start_at: datetime) -> None:
+    """Reserva de equipamento só a partir de AMANHÃ (pedido de 06/10/2026):
+    nada no passado nem no próprio dia — dá tempo de o laboratório se
+    organizar. Vale para criar e para mudar o horário. Reuniões/eventos
+    não têm essa regra."""
+    if start_at.date() <= lab_now().date():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Reservas só a partir de amanhã — não é possível reservar para hoje nem para horários que já passaram.",
+        )
+
+
 @router.post("/reservations", response_model=ReservationOut)
 def create_reservation(payload: ReservationIn, user: CurrentUser, session: SessionDep):
     if payload.end_at <= payload.start_at:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim da reserva precisa ser depois do início")
+    _check_bookable(payload.start_at)
 
     equipment = session.get(Equipment, payload.equipment_id)
     if equipment is None:
@@ -143,6 +156,8 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
 
     if payload.end_at <= payload.start_at:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim da reserva precisa ser depois do início")
+    if (payload.start_at, payload.end_at) != (reservation.start_at, reservation.end_at):
+        _check_bookable(payload.start_at)  # só o título/equipamento mudando não esbarra na regra
 
     equipment = session.get(Equipment, payload.equipment_id)
     if equipment is None:
@@ -153,9 +168,8 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
             status.HTTP_409_CONFLICT, "Já existe uma reserva desse equipamento nesse horário"
         )
 
-    moved = (reservation.equipment_id, reservation.start_at, reservation.end_at) != (
-        payload.equipment_id, payload.start_at, payload.end_at
-    )
+    previous = (reservation.equipment_id, reservation.start_at, reservation.end_at)
+    moved = previous != (payload.equipment_id, payload.start_at, payload.end_at)
     if payload.start_at != reservation.start_at:
         reservation.reminder_sent_at = None  # novo horário, novo lembrete
     reservation.equipment_id = payload.equipment_id
@@ -165,7 +179,7 @@ def move_reservation(reservation_id: int, payload: ReservationMoveIn, user: Curr
         reservation.title = payload.title
     session.add(reservation)
     if moved:
-        notify_reservation(session, reservation, "reagendada", user)  # avisa se foi outra pessoa
+        notify_reservation(session, reservation, "retificada", user, before=previous)  # retificação com o antes
     session.commit()
     session.refresh(reservation)
     return _out(reservation, user)

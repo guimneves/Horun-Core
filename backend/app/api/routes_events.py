@@ -149,6 +149,7 @@ def update_event(event_id: int, payload: EventIn, user: CurrentUser, session: Se
     if payload.end_at < payload.start_at:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "O fim do evento não pode ser antes do início")
     before = (event.title, event.location, event.start_at, event.end_at, event.all_day)
+    previous = (event.start_at, event.end_at, event.all_day, event.location)
     event.title = payload.title.strip() or event.title
     event.description = payload.description.strip()
     event.location = payload.location.strip()
@@ -159,7 +160,8 @@ def update_event(event_id: int, payload: EventIn, user: CurrentUser, session: Se
     event.all_day = payload.all_day
     session.add(event)
     if before != (event.title, event.location, event.start_at, event.end_at, event.all_day):
-        notify_group_event(session, event, "alterada", user)  # só mudança que importa a quem vai
+        # só mudança que importa a quem vai; horário/local = retificação com o antes
+        notify_group_event(session, event, "alterada", user, before=previous)
     session.commit()
     session.refresh(event)
     return _out(session, event, user)

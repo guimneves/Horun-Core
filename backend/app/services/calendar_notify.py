@@ -5,7 +5,11 @@
   recebem um lembrete na véspera (até 24 h antes).
 - **Reservas de equipamento**: quem reservou recebe a confirmação por
   e-mail, um lembrete 1 h antes, e um aviso se outra pessoa (moderador)
-  reagendar ou cancelar a reserva.
+  cancelar a reserva.
+- **Retificação** (pedido de 06/10/2026): mudou o horário (ou o
+  equipamento, ou o local da reunião) → mensagem "Retificação" com o antes
+  e o depois — para quem reservou (mesmo que tenha sido a própria pessoa: o
+  e-mail serve de comprovante, como a confirmação) e para os membros do grupo.
 
 Quem fez a ação não é avisado da própria ação no sininho. E-mail sempre
 respeita o opt-out da pessoa (`User.email_notifications`, ver core/email.py).
@@ -76,17 +80,35 @@ def _group_audience(session: Session, event: Event, exclude_id: int | None) -> t
     return group, users
 
 
-def notify_group_event(session: Session, event: Event, change: str, actor: User | None) -> int:
-    """`change`: "nova" | "alterada" | "cancelada". Só eventos de grupo."""
+def notify_group_event(
+    session: Session, event: Event, change: str, actor: User | None, *, before: tuple | None = None
+) -> int:
+    """`change`: "nova" | "alterada" | "cancelada". Só eventos de grupo.
+    `before` (em "alterada"): (início, fim, dia inteiro, local) antes da
+    mudança — se o horário ou o local mudou, a mensagem é uma RETIFICAÇÃO
+    com o antes e o depois."""
     group, users = _group_audience(session, event, actor.id if actor else None)
     if group is None or not users:
         return 0
     when = _when(event.start_at, event.end_at, event.all_day)
+    previous = None
+    if change == "alterada" and before is not None:
+        old_start, old_end, old_all_day, old_location = before
+        moved = (old_start, old_end, old_all_day) != (event.start_at, event.end_at, event.all_day)
+        if moved or old_location != event.location:
+            previous = (_when(old_start, old_end, old_all_day) if moved else None, old_location if old_location != event.location else None)
     label = {"nova": "Novo evento", "alterada": "Evento alterado", "cancelada": "Evento cancelado"}[change]
+    if previous is not None:
+        label = "Retificação"
     text = f"{label} do grupo {group.name}: {event.title} — {when}"
     lines = [f"{label} do grupo {group.name}.", "", f"{event.title}", f"Quando: {when}"]
+    if previous is not None and previous[0]:
+        text += f" (antes: {previous[0]})"
+        lines.append(f"Antes: {previous[0]}")
     if event.location:
         lines.append(f"Onde: {event.location}")
+    if previous is not None and previous[1] is not None:
+        lines.append(f"Local anterior: {previous[1] or '(sem local)'}")
     if event.description and change != "cancelada":
         lines += ["", event.description]
     return _send(
@@ -103,26 +125,38 @@ def _equipment_name(session: Session, equipment_id: str) -> str:
     return (eq.display_name or eq.id) if eq else equipment_id
 
 
-def notify_reservation(session: Session, reservation: Reservation, change: str, actor: User | None) -> int:
-    """`change`: "confirmada" (só e-mail, para quem reservou) | "reagendada" |
-    "cancelada" (avisam quem reservou quando OUTRA pessoa mexeu)."""
+def notify_reservation(
+    session: Session, reservation: Reservation, change: str, actor: User | None, *, before: tuple | None = None
+) -> int:
+    """`change`: "confirmada" (só e-mail, para quem reservou) | "retificada"
+    (horário ou equipamento mudou — `before` = (equipamento, início, fim)
+    antigos; sempre avisa quem reservou: por e-mail se foi a própria pessoa,
+    sininho + e-mail se foi outra) | "cancelada" (avisa quem reservou quando
+    OUTRA pessoa cancelou)."""
     owner = session.get(User, reservation.user_id)
     if owner is None:
         return 0
     by_other = actor is not None and actor.id != owner.id
-    if change != "confirmada" and not by_other:
+    if change == "cancelada" and not by_other:
         return 0
     name = _equipment_name(session, reservation.equipment_id)
     when = _when(reservation.start_at, reservation.end_at)
     who = f" por {actor.display_name or actor.username}" if by_other else ""
     title = f" ({reservation.title})" if reservation.title else ""
-    label = {"confirmada": "Reserva confirmada", "reagendada": "Reserva reagendada", "cancelada": "Reserva cancelada"}[change]
+    label = {"confirmada": "Reserva confirmada", "retificada": "Retificação de reserva", "cancelada": "Reserva cancelada"}[change]
+    text = f"{label}{who}: {name}{title} — {when}"
+    body = f"{label}{who}.\n\nEquipamento: {name}{title}\nQuando: {when}"
+    if change == "retificada" and before is not None:
+        old_equipment, old_start, old_end = before
+        old_name = _equipment_name(session, old_equipment)
+        old_when = _when(old_start, old_end)
+        antes = f"{old_name}, {old_when}" if old_equipment != reservation.equipment_id else old_when
+        text += f" (antes: {antes})"
+        body += f"\nAntes: {antes}"
     return _send(
-        session, [owner], kind="reservation", bell=change != "confirmada",
-        actor_id=actor.id if actor else None,
-        text=f"{label}{who}: {name}{title} — {when}",
-        subject=f"Horun · {label}: {name}, {when}",
-        body=f"{label}{who}.\n\nEquipamento: {name}{title}\nQuando: {when}",
+        session, [owner], kind="reservation", bell=change != "confirmada" and by_other,
+        actor_id=actor.id if actor else None, text=text,
+        subject=f"Horun · {label}: {name}, {when}", body=body,
     )
 
 

@@ -323,16 +323,23 @@ def test_update_equipment_identity_fields(super_admin_client):
 # --- Resumo por equipamento (card da grade) --------------------------------
 
 
-def test_equipment_summary_reservations_and_last_used(super_admin_client, user_a_client):
+def test_equipment_summary_reservations_and_last_used(super_admin_client, user_a_client, user_a, db_engine):
     from datetime import datetime, timedelta
+
+    from sqlmodel import Session
+
+    from app.db.models import Reservation
 
     super_admin_client.post("/equipment", json={"id": "re7s", "display_name": "RE7S"})
     user_a_client.post("/equipment/re7s/logs", json={"description": "x"})
 
+    # direto no banco: pela API só se reserva a partir de amanhã, e "esta
+    # semana" pode já ter acabado amanhã (domingo)
     today = datetime.now()
-    start = (today + timedelta(hours=1)).isoformat(timespec="seconds")
-    end = (today + timedelta(hours=2)).isoformat(timespec="seconds")
-    user_a_client.post("/reservations", json={"equipment_id": "re7s", "start_at": start, "end_at": end})
+    with Session(db_engine) as s:
+        s.add(Reservation(equipment_id="re7s", user_id=user_a.id,
+                          start_at=today + timedelta(minutes=1), end_at=today + timedelta(minutes=2)))
+        s.commit()
 
     r = super_admin_client.get("/equipment")
     body = r.json()[0]

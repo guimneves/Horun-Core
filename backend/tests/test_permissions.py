@@ -127,9 +127,9 @@ def test_researcher_moderates_mural_events_reservations_and_rue(by_position, sup
 
     res = user_a_client.post(
         "/reservations",
-        json={"equipment_id": "re7s", "title": "Rotina", "start_at": "2026-09-10T09:00:00", "end_at": "2026-09-10T11:00:00"},
+        json={"equipment_id": "re7s", "title": "Rotina", "start_at": "2030-09-10T09:00:00", "end_at": "2030-09-10T11:00:00"},
     ).json()
-    moved = {"equipment_id": "re7s", "start_at": "2026-09-10T13:00:00", "end_at": "2026-09-10T15:00:00"}
+    moved = {"equipment_id": "re7s", "start_at": "2030-09-10T13:00:00", "end_at": "2030-09-10T15:00:00"}
     assert pesq.patch(f"/reservations/{res['id']}", json=moved).status_code == 200
 
     log = user_a_client.post("/equipment/re7s/logs", json={"description": "uso"}).json()

@@ -6,6 +6,13 @@ const fieldStyle = { background: 'var(--color-surface)', color: 'var(--color-tex
 const labelCls = 'mb-1 block text-xs font-medium'
 const labelStyle = { color: 'var(--color-text-muted)' } as const
 
+// Reserva só a partir de amanhã (regra do backend, routes_reservations.py)
+function tomorrow(): Date {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d
+}
+
 function toLocalInputDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
@@ -30,7 +37,7 @@ export function ReservationPanel({
   const editing = !!initial
   const [equipmentId, setEquipmentId] = useState(initial?.equipment_id ?? equipment[0]?.id ?? '')
   const [title, setTitle] = useState(initial?.title ?? '')
-  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(new Date()))
+  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(tomorrow()))
   const [start, setStart] = useState(initial ? new Date(initial.start_at).toTimeString().slice(0, 5) : '09:00')
   const [end, setEnd] = useState(initial ? new Date(initial.end_at).toTimeString().slice(0, 5) : '10:00')
   const [error, setError] = useState<string | null>(null)
@@ -91,7 +98,8 @@ export function ReservationPanel({
       <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={readOnly} placeholder="ex.: Rotina de análise" className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
 
       <label className={labelCls} style={labelStyle}>Data</label>
-      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={readOnly} className={`mb-3 ${field} disabled:opacity-60`} style={fieldStyle} />
+      <input type="date" value={date} min={toLocalInputDate(tomorrow())} onChange={(e) => setDate(e.target.value)} disabled={readOnly} className={`mb-1 ${field} disabled:opacity-60`} style={fieldStyle} />
+      <p className="mb-3 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>Reservas a partir de amanhã.</p>
 
       <div className="mb-3 flex gap-2">
         <div className="flex-1">

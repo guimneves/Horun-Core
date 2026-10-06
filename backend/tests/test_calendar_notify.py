@@ -66,7 +66,7 @@ def test_meeting_change_and_cancel_notify(super_admin_client, user_a_client, gro
     super_admin_client.patch(f"/events/{ev['id']}", json={**ev, "start_at": _future(72), "end_at": _future(73)})
     super_admin_client.delete(f"/events/{ev['id']}")
     texts = [n["text"] for n in user_a_client.get("/notifications").json()]
-    assert any(t.startswith("Evento alterado") for t in texts)
+    assert any(t.startswith("Retificação") for t in texts)
     assert any(t.startswith("Evento cancelado") for t in texts)
 
 
@@ -75,7 +75,7 @@ def test_lab_events_do_not_notify(super_admin_client, user_a_client):
     assert user_a_client.get("/notifications").json() == []
 
 
-def _reserve(client, hours=3):
+def _reserve(client, hours=48):  # reserva só a partir de amanhã
     r = client.post("/reservations", json={"equipment_id": "re7s", "title": "Rotina",
                                            "start_at": _future(hours), "end_at": _future(hours + 2)})
     assert r.status_code == 200, r.text
@@ -97,24 +97,41 @@ def test_reservation_confirmation_is_email_only(user_a_client, equipment, db_eng
 
 def test_moderator_moving_or_cancelling_notifies_the_owner(super_admin_client, user_a_client, equipment):
     r = _reserve(user_a_client)
-    super_admin_client.patch(f"/reservations/{r['id']}", json={"equipment_id": "re7s", "start_at": _future(5), "end_at": _future(6)})
+    super_admin_client.patch(f"/reservations/{r['id']}", json={"equipment_id": "re7s", "start_at": _future(72), "end_at": _future(73)})
     super_admin_client.delete(f"/reservations/{r['id']}")
     texts = [n["text"] for n in user_a_client.get("/notifications").json()]
-    assert any(t.startswith("Reserva reagendada por superadmin") for t in texts)
+    assert any(t.startswith("Retificação de reserva por superadmin") and "(antes:" in t for t in texts)
     assert any(t.startswith("Reserva cancelada por superadmin") for t in texts)
 
 
-def test_owner_moving_own_reservation_is_silent(user_a_client, equipment):
+def test_owner_moving_own_reservation_gets_rectification_email(user_a_client, equipment, db_engine, emails):
+    _give_emails(db_engine)
     r = _reserve(user_a_client)
-    user_a_client.patch(f"/reservations/{r['id']}", json={"equipment_id": "re7s", "start_at": _future(5), "end_at": _future(6)})
-    assert user_a_client.get("/notifications").json() == []
+    emails.clear()
+    user_a_client.patch(f"/reservations/{r['id']}", json={"equipment_id": "re7s", "start_at": _future(72), "end_at": _future(73)})
+    (to, subject, body), = emails
+    assert subject.startswith("Horun · Retificação de reserva") and "Antes:" in body
+    assert user_a_client.get("/notifications").json() == []  # a própria ação: só o e-mail, como a confirmação
+
+
+def test_meeting_time_change_is_a_rectification_with_before(super_admin_client, user_a_client, group):
+    ev = _meeting(super_admin_client, group["id"])
+    super_admin_client.patch(f"/events/{ev['id']}", json={**ev, "start_at": _future(72), "end_at": _future(73)})
+    text = user_a_client.get("/notifications").json()[0]["text"]
+    assert text.startswith("Retificação do grupo Geoquímica") and "(antes:" in text
 
 
 def test_reminders_once_and_only_when_due(super_admin_client, user_a_client, group, equipment, db_engine):
     _meeting(super_admin_client, group["id"], start_at=_future(20), end_at=_future(21))  # dentro de 24 h
     _meeting(super_admin_client, group["id"], title="Longe", start_at=_future(60), end_at=_future(61))
-    _reserve(user_a_client, hours=0.5)  # começa em 30 min
-    _reserve(user_a_client, hours=10)  # ainda longe
+    # direto no banco: pela API só se reserva a partir de amanhã
+    from app.db.models import Reservation
+
+    with Session(db_engine) as s:
+        for hours in (0.5, 10):  # começa em 30 min / ainda longe
+            start = datetime.now() + timedelta(hours=hours)
+            s.add(Reservation(equipment_id="re7s", user_id=2, start_at=start, end_at=start + timedelta(hours=1)))
+        s.commit()
     assert super_admin_client.post("/admin/reminders/calendar").json() == {"events": 1, "reservations": 1}
     assert super_admin_client.post("/admin/reminders/calendar").json() == {"events": 0, "reservations": 0}
     texts = [n["text"] for n in user_a_client.get("/notifications").json()]
