@@ -26,3 +26,12 @@ Thumbs.db
 
 # Dumps do serviço db-backup (pasta padrão; em produção use BACKUP_DIR fora do repositório)
 backups/
+
+# Repositórios dos módulos e do agente clonados DENTRO desta pasta no servidor
+# (cada um tem o seu próprio git). Sem isto, um `git clean` no Core os trataria
+# como lixo e poderia apagá-los.
+RE7S-Horun/
+Horun-Financeiro/
+Controle-de-reagentes/
+Controle-Analitico/
+Agent-Horun/
