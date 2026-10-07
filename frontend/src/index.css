@@ -16,3 +16,15 @@
   animation-duration: 0.32s;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* Celular (Prompt_Horun_Modulo.md, seção 13): abaixo de `md` (768 px) os
+   campos ficam com fonte ≥ 16 px — o iPhone dá zoom na página ao focar um
+   campo menor. Fora de @layer (e com !important) para vencer as classes
+   utilitárias e os estilos inline de tamanho de fonte. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

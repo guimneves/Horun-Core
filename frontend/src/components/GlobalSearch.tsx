@@ -11,7 +11,7 @@ const KIND_LABEL: Record<string, string> = {
 }
 const KIND_ORDER = ['post', 'equipment', 'module', 'person']
 
-export function GlobalSearch() {
+export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }) {
   const navigate = useNavigate()
   const ref = useRef<HTMLDivElement>(null)
   const [q, setQ] = useState('')
@@ -66,7 +66,7 @@ export function GlobalSearch() {
   })).filter((g) => g.items.length > 0)
 
   return (
-    <div ref={ref} className="relative w-[380px]">
+    <div ref={ref} className="relative w-full md:w-[380px]">
       <div
         className="flex items-center gap-2.5 rounded-full px-3.5 py-2"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
@@ -80,8 +80,10 @@ export function GlobalSearch() {
             if (e.key === 'Escape') setOpen(false)
             if (e.key === 'Enter' && hits && hits.length > 0) go(hits[0])
           }}
+          autoFocus={autoFocus}
+          type="search"
           placeholder="Buscar avisos, equipamentos, pessoas…"
-          className="w-full bg-transparent text-[13px] outline-none"
+          className="min-h-6 w-full bg-transparent text-[13px] outline-none"
           style={{ color: 'var(--color-text)' }}
         />
       </div>
@@ -113,7 +115,7 @@ export function GlobalSearch() {
                 <button
                   key={g.kind + i}
                   onClick={() => go(hit)}
-                  className="block w-full px-4 py-2 text-left"
+                  className="block min-h-11 w-full px-4 py-2 text-left"
                   style={{ borderBottom: '1px solid var(--color-border)' }}
                 >
                   <div className="truncate text-[13px]">{hit.title}</div>

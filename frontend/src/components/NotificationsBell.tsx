@@ -84,7 +84,7 @@ export function NotificationsBell() {
       <button
         onClick={toggle}
         aria-label="Notificações"
-        className="relative flex h-8 w-8 items-center justify-center rounded-full"
+        className="relative flex h-10 w-10 items-center justify-center rounded-full md:h-8 md:w-8"
         style={{ color: 'var(--color-text-muted)' }}
       >
         <BellIcon />
@@ -100,7 +100,7 @@ export function NotificationsBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-full z-20 mt-2 w-[340px] overflow-hidden rounded-xl border shadow-lg"
+          className="fixed inset-x-2 top-14 z-40 overflow-hidden rounded-xl border shadow-lg md:absolute md:inset-x-auto md:right-0 md:top-full md:z-20 md:mt-2 md:w-[340px]"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
           <div
@@ -110,7 +110,7 @@ export function NotificationsBell() {
             Notificações
           </div>
 
-          <div className="max-h-[380px] overflow-y-auto">
+          <div className="max-h-[calc(100dvh-8rem)] overflow-y-auto md:max-h-[380px]">
             {items === null && (
               <div className="px-4 py-6 text-center text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
                 Carregando…

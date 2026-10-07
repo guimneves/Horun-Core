@@ -99,9 +99,9 @@ export function LoginPage() {
       </div>
 
       {/* Painel direito — formulário */}
-      <div className="flex flex-1 items-center justify-center p-8">
+      <div className="flex flex-1 items-center justify-center px-5 py-8 md:p-8">
         <div className="w-full max-w-[380px]">
-          <img src={horunIcon} alt="Horun" className="mb-6 h-16 w-16 rounded-2xl" />
+          <img src={horunIcon} alt="Horun" className="mb-6 h-14 w-14 rounded-2xl md:h-16 md:w-16" />
           {mode === 'login' ? (
           <form onSubmit={handleLogin} className="w-full">
             <div className="mb-1 text-[22px] font-semibold">Entrar</div>
@@ -146,7 +146,7 @@ export function LoginPage() {
 
             <p className="mt-7 text-center text-[13px] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
               Ainda não definiu uma senha?{' '}
-              <button type="button" className="underline" style={{ color: 'var(--color-primary)' }} onClick={() => switchMode('primeiro-acesso')}>
+              <button type="button" className="min-h-10 underline" style={{ color: 'var(--color-primary)' }} onClick={() => switchMode('primeiro-acesso')}>
                 Primeiro acesso
               </button>
               <br />
@@ -219,7 +219,7 @@ export function LoginPage() {
 
             <p className="mt-7 text-center text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
               Já tem uma senha?{' '}
-              <button type="button" className="underline" style={{ color: 'var(--color-primary)' }} onClick={() => switchMode('login')}>
+              <button type="button" className="min-h-10 underline" style={{ color: 'var(--color-primary)' }} onClick={() => switchMode('login')}>
                 Voltar para o login
               </button>
             </p>

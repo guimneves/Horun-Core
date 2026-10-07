@@ -71,11 +71,11 @@ export function OnboardingModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
       style={{ background: 'rgba(10,15,40,0.55)' }}
     >
       <div
-        className="w-full max-w-[460px] rounded-2xl border p-6"
+        className="max-h-[92dvh] w-full max-w-[460px] overflow-y-auto rounded-t-2xl border p-5 sm:max-h-[calc(100dvh-2rem)] sm:rounded-2xl sm:p-6"
         style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
       >
         <div className="mb-1 text-lg font-semibold">Bem-vindo(a) ao Horun</div>
@@ -132,7 +132,7 @@ export function OnboardingModal() {
           <button
             type="button"
             disabled={busy}
-            className="text-[13px]"
+            className="min-h-10 text-[13px]"
             style={{ color: 'var(--color-text-muted)' }}
             onClick={() => finish(false)}
           >

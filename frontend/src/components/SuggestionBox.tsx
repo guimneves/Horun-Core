@@ -110,10 +110,10 @@ export function SuggestionBox() {
   if (!user) return null
 
   return (
-    <div ref={ref} className="fixed bottom-5 right-5 z-30">
+    <div ref={ref} className="fixed bottom-4 right-4 z-30 md:bottom-5 md:right-5">
       {open && (
         <div
-          className="absolute bottom-full right-0 mb-3 w-[340px] overflow-hidden rounded-xl border shadow-lg"
+          className="absolute bottom-full right-0 mb-3 flex max-h-[calc(100dvh-6rem)] w-[min(340px,calc(100vw-2rem))] flex-col overflow-y-auto rounded-xl border shadow-lg"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
           <div className="px-4 py-3 text-[13px] font-semibold" style={{ borderBottom: '1px solid var(--color-border)' }}>
@@ -141,7 +141,7 @@ export function SuggestionBox() {
             <button
               onClick={send}
               disabled={!text.trim() || sending}
-              className="mt-2 w-full rounded-lg py-2 text-[13px] font-medium disabled:opacity-50"
+              className="mt-2 min-h-10 w-full rounded-lg py-2 text-[13px] font-medium disabled:opacity-50"
               style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
             >
               {sending ? 'Enviando…' : 'Enviar'}
@@ -185,16 +185,16 @@ export function SuggestionBox() {
                       </span>
                       <div className="flex gap-2">
                         {s.status === 'novo' && (
-                          <button onClick={() => setStatus(s.id, 'lida')} className="underline">
+                          <button onClick={() => setStatus(s.id, 'lida')} className="min-h-8 underline">
                             lida
                           </button>
                         )}
                         {s.status !== 'arquivada' && (
-                          <button onClick={() => setStatus(s.id, 'arquivada')} className="underline">
+                          <button onClick={() => setStatus(s.id, 'arquivada')} className="min-h-8 underline">
                             arquivar
                           </button>
                         )}
-                        <button onClick={() => remove(s.id)} className="underline" style={{ color: '#d43b3b' }}>
+                        <button onClick={() => remove(s.id)} className="min-h-8 underline" style={{ color: '#d43b3b' }}>
                           excluir
                         </button>
                       </div>
