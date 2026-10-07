@@ -46,16 +46,16 @@ export function ModulesPage() {
   const sidebarEligible = (modules ?? []).filter((m) => m.has_access && m.embeddable)
 
   return (
-    <div className="p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="p-3 md:p-6">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <h2 className="text-lg font-semibold">Módulos</h2>
         {sidebarEligible.length > 0 && (
           <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
             <span>Barra lateral:</span>
-            <button className="underline" onClick={() => setHiddenPersisted(new Set())}>
+            <button className="min-h-10 md:min-h-0 underline" onClick={() => setHiddenPersisted(new Set())}>
               mostrar todos
             </button>
-            <button className="underline" onClick={() => setHiddenPersisted(new Set(sidebarEligible.map((m) => m.id)))}>
+            <button className="min-h-10 md:min-h-0 underline" onClick={() => setHiddenPersisted(new Set(sidebarEligible.map((m) => m.id)))}>
               ocultar todos
             </button>
           </div>
@@ -89,14 +89,14 @@ export function ModulesPage() {
                 m.embeddable ? (
                   <a
                     href={`/m/${encodeURIComponent(m.id)}/`}
-                    className="inline-block rounded-md px-3 py-1.5 text-sm font-medium"
+                    className="inline-flex min-h-10 items-center rounded-md px-3 py-1.5 text-sm font-medium md:min-h-0"
                     style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
                   >
                     Abrir
                   </a>
                 ) : (
                   <button
-                    className="rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                    className="min-h-10 md:min-h-0 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
                     disabled
                     title="Este módulo ainda não suporta interface embutida no Core (Prompt_Horun_Core.md, seção 8)."
@@ -112,7 +112,7 @@ export function ModulesPage() {
             </div>
 
             {m.has_access && m.embeddable && (
-              <label className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              <label className="mt-3 flex min-h-10 md:min-h-0 items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 <input type="checkbox" checked={!hidden.has(m.id)} onChange={() => toggleSidebar(m.id)} />
                 Mostrar na barra lateral
               </label>

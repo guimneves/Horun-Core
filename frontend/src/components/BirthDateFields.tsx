@@ -46,7 +46,7 @@ export function BirthDateFields({
           ))}
         </select>
         <select
-          className="flex-1 rounded-lg px-2 py-2 text-[13px] capitalize outline-none"
+          className="min-w-0 flex-1 rounded-lg px-2 py-2 text-[13px] capitalize outline-none"
           style={fieldStyle}
           value={month ?? ''}
           onChange={(e) => {

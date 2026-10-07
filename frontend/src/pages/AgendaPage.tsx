@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, type Birthday, type CalendarEvent, type Equipment, type Group, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
 import { toLocalIso } from '../lib/datetime'
 import { ReservationPanel } from '../components/ReservationPanel'
+import { BottomSheet } from '../components/BottomSheet'
+import { DayNav } from '../components/DayNav'
+import { useIsMobile } from '../lib/useIsMobile'
 
 const START_HOUR = 8
 const END_HOUR = 19
@@ -67,20 +70,26 @@ function EventPanel({
   groupId,
   onDone,
   onClose,
+  initialDate,
+  bare = false,
 }: {
   initial?: CalendarEvent
   canEdit: boolean
   groupId?: number | null
   onDone: () => void
   onClose: () => void
+  /** Data sugerida para um evento novo (AAAA-MM-DD). */
+  initialDate?: string
+  /** Sem borda/cartão próprio: o painel está dentro de uma janela (celular). */
+  bare?: boolean
 }) {
   const editing = !!initial
   const [title, setTitle] = useState(initial?.title ?? '')
   const [location, setLocation] = useState(initial?.location ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [allDay, setAllDay] = useState(initial?.all_day ?? false)
-  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(new Date()))
-  const [endDate, setEndDate] = useState(initial ? toLocalInputDate(new Date(initial.end_at)) : toLocalInputDate(new Date()))
+  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : initialDate ?? toLocalInputDate(new Date()))
+  const [endDate, setEndDate] = useState(initial ? toLocalInputDate(new Date(initial.end_at)) : initialDate ?? toLocalInputDate(new Date()))
   const [start, setStart] = useState(initial && !initial.all_day ? new Date(initial.start_at).toTimeString().slice(0, 5) : '14:00')
   const [end, setEnd] = useState(initial && !initial.all_day ? new Date(initial.end_at).toTimeString().slice(0, 5) : '15:00')
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +138,10 @@ function EventPanel({
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+    <div
+      className={bare ? 'px-4 pb-6 pt-1' : 'rounded-2xl border p-4'}
+      style={bare ? undefined : { borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+    >
       <div className="mb-3 text-sm font-semibold">{editing ? 'Evento' : 'Novo evento'}</div>
 
       <label className={labelCls} style={labelStyle}>Título</label>
@@ -154,7 +166,7 @@ function EventPanel({
         </>
       )}
 
-      <label className="mb-3 flex items-center gap-2 text-[13px]">
+      <label className="mb-3 flex min-h-10 items-center gap-2 text-[13px] md:min-h-0">
         <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} disabled={readOnly} />
         Dia inteiro
       </label>
@@ -184,16 +196,16 @@ function EventPanel({
       {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
       {readOnly ? (
-        <button onClick={onClose} className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+        <button onClick={onClose} className="min-h-10 w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
       ) : (
         <div className="flex gap-2">
-          <button onClick={save} disabled={busy} className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
+          <button onClick={save} disabled={busy} className="min-h-10 flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
             {editing ? 'Salvar' : 'Criar evento'}
           </button>
           {editing && (
-            <button onClick={remove} disabled={busy} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
+            <button onClick={remove} disabled={busy} className="min-h-10 rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
           )}
-          <button onClick={onClose} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+          <button onClick={onClose} className="min-h-10 rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
         </div>
       )}
     </div>
@@ -229,6 +241,14 @@ export function AgendaPage() {
     }
   })
   const gridRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
+  // Dia mostrado no celular (visão de dia). A semana carregada acompanha.
+  const [selectedDay, setSelectedDay] = useState<Date>(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
+  const closePanel = useCallback(() => setPanel(null), [])
 
   const monday = useMemo(() => addDays(getMonday(new Date()), weekOffset * 7), [weekOffset])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday])
@@ -254,6 +274,21 @@ export function AgendaPage() {
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Não foi possível carregar a agenda.'))
   }
   useEffect(reload, [weekOffset])
+
+  function goToDay(d: Date) {
+    const day = new Date(d)
+    day.setHours(0, 0, 0, 0)
+    setSelectedDay(day)
+    const weeks = Math.round((getMonday(day).getTime() - getMonday(new Date()).getTime()) / (7 * 24 * 3600 * 1000))
+    setWeekOffset(weeks)
+  }
+
+  // Desktop → celular depois de trocar de semana: o dia mostrado passa a
+  // ser um dia da semana carregada (hoje, se ela contém hoje).
+  useEffect(() => {
+    if (!isMobile || days.some((d) => isSameDay(d, selectedDay))) return
+    setSelectedDay(days.find((d) => isSameDay(d, new Date())) ?? days[0])
+  }, [isMobile, days, selectedDay])
 
   useEffect(() => {
     api
@@ -411,6 +446,181 @@ export function AgendaPage() {
 
   const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
 
+  // Painel aberto (criar/editar reserva ou evento). `bare` = dentro da
+  // janela de baixo do celular; no desktop fica na coluna lateral.
+  function renderPanel(bare: boolean) {
+    const close = () => setPanel(null)
+    const suggested = isMobile ? toLocalInputDate(selectedDay) : undefined
+    if (panel?.kind === 'new-reservation')
+      return <ReservationPanel equipment={equipment} canEdit onDone={reload} onClose={close} initialDate={suggested} bare={bare} />
+    if (panel?.kind === 'reservation')
+      return <ReservationPanel equipment={equipment} initial={panel.data} canEdit={canEditReservation(panel.data)} onDone={reload} onClose={close} bare={bare} />
+    if (panel?.kind === 'new-event') return <EventPanel canEdit groupId={scope} onDone={reload} onClose={close} initialDate={suggested} bare={bare} />
+    if (panel?.kind === 'event')
+      return <EventPanel initial={panel.data} canEdit={canEditEvent(panel.data)} onDone={reload} onClose={close} bare={bare} />
+    return null
+  }
+
+  const scopeSelect = myGroups.length > 0 && (
+    <select
+      className="min-h-10 rounded-lg px-2.5 py-1.5 text-[13px] outline-none md:min-h-0"
+      style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+      value={scope ?? ''}
+      onChange={(e) => setScope(e.target.value ? Number(e.target.value) : null)}
+      aria-label="Agenda do laboratório ou de um grupo"
+    >
+      <option value="">🏛 Laboratório</option>
+      {myGroups.map((g) => (
+        <option key={g.id} value={g.id}>{g.name}</option>
+      ))}
+    </select>
+  )
+
+  // ── Celular: visão de dia (lista do dia em vez da grade de 7 colunas) ──
+  // Sem arrastar: tocar num item abre o painel de edição numa janela de
+  // baixo, que faz tudo o que o arrastar fazia (dia, horário, equipamento).
+  if (isMobile) {
+    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const dayBirthdays = birthdaysForDay(selectedDay)
+    const dayAllDay = allDayEventsForDay(selectedDay)
+    const timed = [
+      ...timedEventsForDay(selectedDay).map((e) => ({ kind: 'e' as const, start: e.start_at, end: e.end_at, ev: e })),
+      ...reservations
+        .filter((r) => !hidden.has(r.equipment_id) && isSameDay(new Date(r.start_at), selectedDay))
+        .map((r) => ({ kind: 'r' as const, start: r.start_at, end: r.end_at, r })),
+    ].sort((a, b) => a.start.localeCompare(b.start))
+    const empty = dayBirthdays.length === 0 && dayAllDay.length === 0 && timed.length === 0
+    const hiddenCount = equipment.filter((eq) => hidden.has(eq.id)).length
+
+    return (
+      <div className="flex flex-col gap-3 p-3">
+        <DayNav day={selectedDay} weekDays={days} onChange={goToDay} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          {scopeSelect}
+          <div className="ml-auto flex gap-2">
+            {canCreateEventHere && (
+              <button onClick={() => setPanel({ kind: 'new-event' })} className="flex min-h-10 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-semibold" style={{ borderColor: 'var(--color-border)' }}>
+                <PlusIcon />
+                Evento
+              </button>
+            )}
+            <button onClick={() => setPanel({ kind: 'new-reservation' })} className="flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
+              <PlusIcon />
+              Reserva
+            </button>
+          </div>
+        </div>
+
+        {loadError && <p className="text-[13px]" style={{ color: '#d43b3b' }}>{loadError}</p>}
+
+        <div className="flex flex-col gap-2" data-agenda-day-list>
+          {dayBirthdays.map((b) => (
+            <div key={`b${b.user_id}`} className="flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px]" style={{ background: 'var(--color-surface)' }}>
+              <span aria-hidden>🎂</span>
+              <span className="min-w-0 flex-1 truncate">Aniversário de {b.name}</span>
+            </div>
+          ))}
+          {dayAllDay.map((e) => (
+            <button
+              key={`a${e.id}`}
+              onClick={() => setPanel({ kind: 'event', data: e })}
+              className="flex min-h-11 items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium"
+              style={{ background: groupColor(e.group_id), color: 'var(--color-primary-contrast)' }}
+            >
+              <span className="text-[11px] font-semibold uppercase opacity-80">Dia inteiro</span>
+              <span className="min-w-0 flex-1 truncate">{e.title}</span>
+            </button>
+          ))}
+          {timed.map((item) => {
+            if (item.kind === 'e') {
+              const e = item.ev
+              return (
+                <button
+                  key={`e${e.id}`}
+                  onClick={() => setPanel({ kind: 'event', data: e })}
+                  className="flex items-stretch gap-3 rounded-xl border px-3 py-2.5 text-left"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+                >
+                  <div className="w-[52px] flex-shrink-0 text-[12.5px] font-semibold tabular-nums">
+                    {fmt(e.start_at)}
+                    <div className="font-normal" style={{ color: 'var(--color-text-muted)' }}>{fmt(e.end_at)}</div>
+                  </div>
+                  <div className="w-[3px] flex-shrink-0 rounded" style={{ background: groupColor(e.group_id) }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[14px] font-semibold">{e.title}</div>
+                    <div className="truncate text-[12.5px]" style={{ color: 'var(--color-text-muted)' }}>
+                      Evento · {e.location || e.created_by_name}
+                    </div>
+                  </div>
+                </button>
+              )
+            }
+            const r = item.r
+            const eq = equipmentById.get(r.equipment_id)
+            return (
+              <button
+                key={`r${r.id}`}
+                onClick={() => setPanel({ kind: 'reservation', data: r })}
+                className="flex items-stretch gap-3 rounded-xl border px-3 py-2.5 text-left"
+                style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+              >
+                <div className="w-[52px] flex-shrink-0 text-[12.5px] font-semibold tabular-nums">
+                  {fmt(r.start_at)}
+                  <div className="font-normal" style={{ color: 'var(--color-text-muted)' }}>{fmt(r.end_at)}</div>
+                </div>
+                <div className="w-[3px] flex-shrink-0 rounded" style={{ background: eq?.color ?? 'var(--color-primary)' }} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-semibold">{eq?.display_name ?? r.equipment_id}</div>
+                  <div className="truncate text-[12.5px]" style={{ color: 'var(--color-text-muted)' }}>
+                    {r.user_display_name}
+                    {r.title ? ` · ${r.title}` : ''}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+          {empty && !loadError && (
+            <p className="rounded-xl border border-dashed px-3 py-6 text-center text-[13px]" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+              Nada marcado para este dia.
+            </p>
+          )}
+        </div>
+
+        {equipment.length > 0 && (
+          <details className="rounded-xl border" style={{ borderColor: 'var(--color-border)' }}>
+            <summary className="flex min-h-11 cursor-pointer items-center px-3 text-[13px] font-semibold">
+              Equipamentos na agenda{hiddenCount > 0 ? ` (${hiddenCount} oculto${hiddenCount > 1 ? 's' : ''})` : ''}
+            </summary>
+            <div className="flex flex-wrap gap-2 px-3 pb-3">
+              {equipment.map((eq) => {
+                const off = hidden.has(eq.id)
+                return (
+                  <button
+                    key={eq.id}
+                    onClick={() => toggleEquipment(eq.id)}
+                    aria-pressed={!off}
+                    className="flex min-h-10 items-center gap-2 rounded-full border px-3 text-[13px]"
+                    style={{ borderColor: 'var(--color-border)', color: off ? 'var(--color-text-muted)' : 'var(--color-text)', textDecoration: off ? 'line-through' : undefined }}
+                  >
+                    <span className="h-3 w-3 flex-shrink-0 rounded" style={off ? { border: `2px solid ${eq.color}` } : { background: eq.color }} />
+                    {eq.display_name}
+                  </button>
+                )
+              })}
+            </div>
+          </details>
+        )}
+
+        {panel !== null && (
+          <BottomSheet label={panel.kind.includes('event') ? 'Evento' : 'Reserva'} onClose={closePanel}>
+            {renderPanel(true)}
+          </BottomSheet>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -427,19 +637,7 @@ export function AgendaPage() {
               <ChevronRightIcon />
             </button>
             <span className="text-base font-semibold capitalize">{rangeLabel}</span>
-            {myGroups.length > 0 && (
-              <select
-                className="rounded-lg px-2.5 py-1.5 text-[13px] outline-none"
-                style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                value={scope ?? ''}
-                onChange={(e) => setScope(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">🏛 Laboratório</option>
-                {myGroups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-            )}
+            {scopeSelect}
           </div>
           <div className="flex items-center gap-2">
             {canCreateEventHere && (
@@ -612,16 +810,7 @@ export function AgendaPage() {
 
       {/* Sidebar direita */}
       <div className="flex w-[280px] flex-shrink-0 flex-col gap-6 overflow-y-auto p-5" style={{ borderLeft: '1px solid var(--color-border)' }}>
-        {panel?.kind === 'new-reservation' && (
-          <ReservationPanel equipment={equipment} canEdit onDone={reload} onClose={() => setPanel(null)} />
-        )}
-        {panel?.kind === 'reservation' && (
-          <ReservationPanel equipment={equipment} initial={panel.data} canEdit={canEditReservation(panel.data)} onDone={reload} onClose={() => setPanel(null)} />
-        )}
-        {panel?.kind === 'new-event' && <EventPanel canEdit groupId={scope} onDone={reload} onClose={() => setPanel(null)} />}
-        {panel?.kind === 'event' && (
-          <EventPanel initial={panel.data} canEdit={canEditEvent(panel.data)} onDone={reload} onClose={() => setPanel(null)} />
-        )}
+        {renderPanel(false)}
 
         {panel === null && (
           <>

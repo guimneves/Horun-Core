@@ -143,23 +143,23 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-[560px] p-6">
+    <div className="mx-auto max-w-[560px] p-3 md:p-6">
       <div className="mb-1 text-xl font-semibold">Meu perfil</div>
-      <div className="mb-7 text-[13.5px]" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="mb-5 text-[13.5px] md:mb-7" style={{ color: 'var(--color-text-muted)' }}>
         Seus dados pessoais e sua foto de perfil. Posição e qualificação são definidas pelo administrador.
       </div>
 
       <div
-        className="mb-6 flex items-center gap-5 rounded-2xl border p-5"
+        className="mb-4 flex items-center gap-4 rounded-2xl border p-4 md:mb-6 md:gap-5 md:p-5"
         style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
       >
         <Avatar name={user.display_name || user.username} size={72} userId={user.id} cacheBust={userVersion} />
-        <div>
-          <div className="mb-2 flex gap-2.5">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap gap-2.5">
             <button
               type="button"
               disabled={photoBusy}
-              className="rounded-lg px-3.5 py-2 text-[13px] font-semibold disabled:opacity-50"
+              className="min-h-10 md:min-h-0 rounded-lg px-3.5 py-2 text-[13px] font-semibold disabled:opacity-50"
               style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -169,7 +169,7 @@ export function ProfilePage() {
               <button
                 type="button"
                 disabled={photoBusy}
-                className="rounded-lg px-3.5 py-2 text-[13px] font-semibold disabled:opacity-50"
+                className="min-h-10 md:min-h-0 rounded-lg px-3.5 py-2 text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
                 onClick={handleRemovePhoto}
               >
@@ -186,7 +186,7 @@ export function ProfilePage() {
 
       <form
         onSubmit={handleSave}
-        className="rounded-2xl border p-5"
+        className="rounded-2xl border p-4 md:p-5"
         style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
       >
         <Field label="Nome de exibição" value={displayName} onChange={setDisplayName} placeholder="como aparece no mural e na agenda" />
@@ -203,7 +203,7 @@ export function ProfilePage() {
           Receber notificações importantes por e-mail (menção, resposta, aniversários da semana)
         </label>
 
-        <div className="mb-4 grid grid-cols-2 gap-4">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-[13px] font-medium" style={{ color: 'var(--color-text-muted)' }}>
               Posição
@@ -236,7 +236,7 @@ export function ProfilePage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
+          className="w-full rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60 sm:w-auto"
           style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
         >
           {saving ? 'Salvando…' : 'Salvar perfil'}
@@ -245,7 +245,7 @@ export function ProfilePage() {
 
       <form
         onSubmit={handleChangePassword}
-        className="mt-6 rounded-2xl border p-5"
+        className="mt-4 rounded-2xl border p-4 md:mt-6 md:p-5"
         style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
       >
         <div className="mb-4 text-[15px] font-semibold">Trocar senha</div>
@@ -267,7 +267,7 @@ export function ProfilePage() {
         <button
           type="submit"
           disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
-          className="rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
+          className="w-full rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-60 sm:w-auto"
           style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
         >
           {passwordSaving ? 'Salvando…' : 'Trocar senha'}

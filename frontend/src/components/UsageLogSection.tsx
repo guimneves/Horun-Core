@@ -52,7 +52,7 @@ function EntryForm({
 }) {
   return (
     <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--color-surface)' }}>
-      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4 [&>div]:min-w-0">
         <div>
           <label className={labelCls} style={labelStyle}>Data</label>
           <input type="date" value={draft.date} onChange={(e) => onChange({ ...draft, date: e.target.value })} className={field} style={fieldStyle} />
@@ -86,13 +86,13 @@ function EntryForm({
         <button
           onClick={onSave}
           disabled={busy}
-          className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+          className="min-h-10 md:min-h-0 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
           style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
         >
           Registrar
         </button>
         {onCancel && (
-          <button onClick={onCancel} className="rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+          <button onClick={onCancel} className="min-h-10 md:min-h-0 rounded-lg border px-3 py-1.5 text-xs" style={{ borderColor: 'var(--color-border)' }}>
             cancelar
           </button>
         )}
@@ -206,7 +206,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       <div className="mb-1 flex items-center justify-between">
         <label className={labelCls} style={{ ...labelStyle, marginBottom: 0 }}>Ficha de utilização (RUE)</label>
         {!adding && (
-          <button onClick={() => setAdding(true)} className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
+          <button onClick={() => setAdding(true)} className="min-h-10 md:min-h-0 text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
             + novo registro
           </button>
         )}
@@ -223,7 +223,51 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       ) : logs.length === 0 ? (
         <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Nenhum registro ainda.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Celular: um registro = um cartão (a tabela de 9 colunas fica para o desktop). */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {logs.map((log) => {
+            const canEdit = log.user_id === user?.id || !!user?.can.moderate
+            if (editingId === log.id) {
+              return <EntryForm key={log.id} draft={editDraft} onChange={setEditDraft} onSave={handleSaveEdit} onCancel={() => setEditingId(null)} busy={busy} />
+            }
+            return (
+              <div key={log.id} className="rounded-lg border px-3 py-2.5 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-semibold">
+                    {dateOf(log.occurred_at)} · {timeOf(log.occurred_at)}–{log.ended_at ? timeOf(log.ended_at) : '…'}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{purposeLabel(log.purpose)}</span>
+                </div>
+                <div className="mt-0.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  {log.user_display_name}
+                  {log.experiment_code ? ` · ${log.experiment_code}` : ''}
+                </div>
+                {log.description && <p className="mt-1 break-words text-[13px]">{log.description}</p>}
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 text-xs">
+                  {log.verified_by_name ? (
+                    <span style={{ color: 'var(--color-text-muted)' }}>✓ conferido por {log.verified_by_name}</span>
+                  ) : user?.can.moderate ? (
+                    <button onClick={() => handleVerify(log.id)} className="min-h-10 underline" style={{ color: 'var(--color-primary)' }}>
+                      conferir
+                    </button>
+                  ) : null}
+                  {canEdit && (
+                    <>
+                      <button onClick={() => startEdit(log)} className="min-h-10 underline" style={{ color: 'var(--color-text-muted)' }}>
+                        editar
+                      </button>
+                      <button onClick={() => handleDelete(log.id)} className="min-h-10 underline" style={{ color: '#d43b3b' }}>
+                        remover
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-left text-xs" style={{ minWidth: 640 }}>
             <thead>
               <tr style={{ color: 'var(--color-text-muted)' }}>
@@ -288,6 +332,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   )

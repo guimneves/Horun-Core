@@ -143,10 +143,10 @@ export function MentionTextarea({
       />
       {query !== null && (
         <div
-          className="absolute left-0 top-full z-10 mt-1 w-72 overflow-hidden rounded-lg border shadow-md"
+          className="absolute left-0 top-full z-10 mt-1 w-72 max-w-full overflow-hidden rounded-lg border shadow-md"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
-          <div ref={listRef} className="max-h-56 overflow-y-auto">
+          <div ref={listRef} className="max-h-[40dvh] overflow-y-auto md:max-h-56">
             {matches.map((u, i) => (
               <button
                 key={u.id}
@@ -154,7 +154,7 @@ export function MentionTextarea({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => insertMention(u.username)}
                 onMouseEnter={() => setHighlighted(i)}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                className="flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left text-sm md:min-h-0"
                 style={{ background: i === highlighted ? 'var(--color-surface)' : 'transparent' }}
               >
                 <Avatar name={u.display_name} size={24} userId={u.id} />

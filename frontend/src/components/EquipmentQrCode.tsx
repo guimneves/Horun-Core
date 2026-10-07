@@ -18,12 +18,12 @@ export function EquipmentQrCode({ equipmentName }: { equipmentName: string }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <div id="equipment-qr-print" className="flex flex-col items-center gap-2">
-        <img src={dataUrl} alt={`QR code de ${equipmentName}`} className="rounded-lg" style={{ background: '#fff', padding: 8 }} />
+        <img src={dataUrl} alt={`QR code de ${equipmentName}`} className="max-w-full rounded-lg" style={{ background: '#fff', padding: 8 }} />
         <span className="text-sm font-semibold">{equipmentName}</span>
       </div>
       <button
         onClick={() => window.print()}
-        className="text-xs underline"
+        className="min-h-10 md:min-h-0 text-xs underline"
         style={{ color: 'var(--color-primary)' }}
       >
         imprimir

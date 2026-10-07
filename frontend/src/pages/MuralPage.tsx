@@ -33,7 +33,7 @@ function ScopeChip({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium"
+      className="flex min-h-10 md:min-h-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium"
       style={{
         background: active ? 'var(--color-primary)' : 'var(--color-surface)',
         color: active ? 'var(--color-primary-contrast)' : 'var(--color-text)',
@@ -83,11 +83,13 @@ function Composer({ groupId, onPosted }: { groupId: number | null; onPosted: () 
 
   return (
     <div
-      className="flex items-start gap-3 rounded-2xl border p-4"
+      className="flex items-start gap-3 rounded-2xl border p-3 md:p-4"
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
-      <Avatar name={user?.display_name || user?.username || '?'} size={36} userId={user?.id} />
-      <div className="flex-1">
+      <div className="hidden sm:block">
+        <Avatar name={user?.display_name || user?.username || '?'} size={36} userId={user?.id} />
+      </div>
+      <div className="min-w-0 flex-1">
         <MentionTextarea
           value={content}
           onChange={setContent}
@@ -104,7 +106,7 @@ function Composer({ groupId, onPosted }: { groupId: number | null; onPosted: () 
           >
             <PaperclipIcon style={{ color: 'var(--color-text-muted)' }} />
             <span className="truncate">{file.name}</span>
-            <button className="ml-auto" style={{ color: 'var(--color-text-muted)' }} onClick={() => setFile(null)}>
+            <button className="ml-auto min-h-10 md:min-h-0" style={{ color: 'var(--color-text-muted)' }} onClick={() => setFile(null)}>
               remover
             </button>
           </div>
@@ -115,11 +117,11 @@ function Composer({ groupId, onPosted }: { groupId: number | null; onPosted: () 
           </p>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-1.5 text-[12.5px]"
+            className="flex min-h-10 md:min-h-0 items-center gap-1.5 text-left text-[12.5px]"
             style={{ color: 'var(--color-text-muted)' }}
           >
             <PaperclipIcon />
@@ -129,7 +131,7 @@ function Composer({ groupId, onPosted }: { groupId: number | null; onPosted: () 
           <button
             onClick={handlePost}
             disabled={busy || !content.trim()}
-            className="rounded-lg px-4.5 py-2 text-[13px] font-semibold disabled:opacity-50"
+            className="min-h-10 md:min-h-0 flex-shrink-0 rounded-lg px-4.5 py-2 text-[13px] font-semibold disabled:opacity-50"
             style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
           >
             {busy ? 'Publicando…' : 'Publicar'}
@@ -199,19 +201,19 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
     <div className="flex gap-2.5">
       <Avatar name={reply.author_display_name} size={26} userId={reply.author_id} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2">
           <span className="text-[12.5px] font-semibold">{reply.author_display_name}</span>
           <span className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
             · {timeAgo(reply.created_at)}
           </span>
           {canDelete && !editing && (
-            <button className="ml-auto text-[11px]" style={{ color: 'var(--color-text-muted)' }} onClick={startEdit}>
+            <button className="ml-auto min-h-10 md:min-h-0 text-[11px]" style={{ color: 'var(--color-text-muted)' }} onClick={startEdit}>
               editar
             </button>
           )}
           {canDelete && !editing && (
             <button
-              className="text-[11px]"
+              className="min-h-10 md:min-h-0 text-[11px]"
               style={{ color: '#d43b3b' }}
               onClick={() => api.deleteReply(postId, reply.id).then(onChanged)}
             >
@@ -230,13 +232,13 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
               style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
             />
             <div className="mt-1 flex justify-end gap-2">
-              <button className="text-[11.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
+              <button className="min-h-10 md:min-h-0 px-1 text-[11.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
                 cancelar
               </button>
               <button
                 onClick={saveEdit}
                 disabled={busy || !draft.trim()}
-                className="rounded-md px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
+                className="min-h-10 md:min-h-0 rounded-md px-2.5 py-0.5 text-[11.5px] font-semibold disabled:opacity-50"
                 style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
               >
                 Salvar
@@ -244,7 +246,7 @@ function ReplyRow({ reply, postId, onChanged }: { reply: Post['replies'][number]
             </div>
           </div>
         ) : (
-          <p className="text-[13px] leading-relaxed">{renderWithMentions(reply.content)}</p>
+          <p className="break-words text-[13px] leading-relaxed">{renderWithMentions(reply.content)}</p>
         )}
       </div>
     </div>
@@ -282,7 +284,7 @@ function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void })
       {open ? (
         <div className="flex items-start gap-2.5">
           <Avatar name={user?.display_name || user?.username || '?'} size={26} userId={user?.id} />
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <MentionTextarea
               value={content}
               onChange={setContent}
@@ -293,13 +295,13 @@ function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void })
               style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
             />
             <div className="flex justify-end gap-2">
-              <button className="text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(false)}>
+              <button className="min-h-10 md:min-h-0 px-1 text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(false)}>
                 cancelar
               </button>
               <button
                 onClick={handleReply}
                 disabled={busy || !content.trim()}
-                className="rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
+                className="min-h-10 md:min-h-0 rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
                 style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
               >
                 Responder
@@ -308,7 +310,7 @@ function ReplyThread({ post, onChanged }: { post: Post; onChanged: () => void })
           </div>
         </div>
       ) : (
-        <button className="text-[12.5px] font-medium" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(true)}>
+        <button className="min-h-10 md:min-h-0 text-[12.5px] font-medium" style={{ color: 'var(--color-text-muted)' }} onClick={() => setOpen(true)}>
           Responder{post.replies.length > 0 ? ` (${post.replies.length})` : ''}
         </button>
       )}
@@ -343,13 +345,13 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
 
   return (
     <div
-      className="rounded-2xl border p-4"
+      className="rounded-2xl border p-3 md:p-4"
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
-      <div className="flex gap-3">
+      <div className="flex gap-2.5 md:gap-3">
         <Avatar name={post.author_display_name} size={36} userId={post.author_id} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2">
             <span className="text-[13.5px] font-semibold">{post.author_display_name}</span>
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
               · {timeAgo(post.created_at)}
@@ -365,7 +367,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
             )}
             {!post.pinned && canManage && (
               <button
-                className="ml-auto text-[11.5px]"
+                className="ml-auto min-h-10 md:min-h-0 text-[11.5px]"
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={() => api.pinPost(post.id, true).then(onChanged)}
               >
@@ -374,7 +376,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
             )}
             {post.pinned && canManage && (
               <button
-                className="text-[11.5px]"
+                className="min-h-10 md:min-h-0 text-[11.5px]"
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={() => api.pinPost(post.id, false).then(onChanged)}
               >
@@ -383,7 +385,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
             )}
             {canDelete && !editing && (
               <button
-                className={post.pinned || canManage ? 'text-[11.5px]' : 'ml-auto text-[11.5px]'}
+                className={post.pinned || canManage ? 'min-h-10 md:min-h-0 text-[11.5px]' : 'ml-auto min-h-10 md:min-h-0 text-[11.5px]'}
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={startEdit}
               >
@@ -392,7 +394,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
             )}
             {canDelete && !editing && (
               <button
-                className="text-[11.5px]"
+                className="min-h-10 md:min-h-0 text-[11.5px]"
                 style={{ color: '#d43b3b' }}
                 onClick={() => api.deletePost(post.id).then(onChanged)}
               >
@@ -411,13 +413,13 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
                 style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
               />
               <div className="mt-1.5 flex justify-end gap-2">
-                <button className="text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
+                <button className="min-h-10 md:min-h-0 px-1 text-[12.5px]" style={{ color: 'var(--color-text-muted)' }} onClick={() => setEditing(false)}>
                   cancelar
                 </button>
                 <button
                   onClick={saveEdit}
                   disabled={busy || !draft.trim()}
-                  className="rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
+                  className="min-h-10 md:min-h-0 rounded-md px-3 py-1 text-[12.5px] font-semibold disabled:opacity-50"
                   style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
                 >
                   Salvar
@@ -425,7 +427,7 @@ function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
               </div>
             </div>
           ) : (
-            <p className="mt-1.5 text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
+            <p className="mt-1.5 break-words text-sm leading-relaxed">{renderWithMentions(post.content)}</p>
           )}
           <PostAttachment post={post} />
         </div>
@@ -608,8 +610,8 @@ export function MuralPage() {
   const scopeName = scope ? myGroups.find((g) => g.id === scope)?.name ?? 'grupo' : 'Laboratório'
 
   return (
-    <div className="flex">
-      <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+    <div className="flex flex-col lg:flex-row">
+      <div className="mx-auto flex w-full min-w-0 max-w-[720px] flex-col gap-3 p-3 md:gap-4 md:p-6">
         {myGroups.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <ScopeChip label="🏛 Laboratório" active={scope === null} onClick={() => setScope(null)} />
@@ -632,7 +634,7 @@ export function MuralPage() {
         ))}
       </div>
 
-      <div className="w-[308px] flex-shrink-0 border-l p-6" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="w-full flex-shrink-0 border-t p-4 md:p-6 lg:w-[308px] lg:border-l lg:border-t-0" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex flex-col gap-6">
           <ModulesWidget />
           <AgendaWidget />

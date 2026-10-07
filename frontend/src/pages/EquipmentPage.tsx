@@ -100,21 +100,21 @@ export function EquipmentPage() {
   }, [filtered, areas])
 
   return (
-    <div className="p-6">
-      <h2 className="mb-5 text-lg font-semibold">Equipamentos</h2>
+    <div className="p-3 md:p-6">
+      <h2 className="mb-4 text-lg font-semibold md:mb-5">Equipamentos</h2>
 
-      <div className="mb-6 flex flex-wrap gap-2.5">
+      <div className="mb-5 flex flex-wrap gap-2.5 md:mb-6">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nome ou descrição…"
-          className="min-w-[220px] flex-1 rounded-lg px-3 py-2 text-sm outline-none"
+          className="w-full rounded-lg px-3 py-2 text-sm outline-none sm:w-auto sm:min-w-[220px] sm:flex-1"
           style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
         />
         <select
           value={areaFilter}
           onChange={(e) => setAreaFilter(e.target.value)}
-          className="rounded-lg px-3 py-2 text-sm outline-none"
+          className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none sm:flex-none"
           style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
         >
           <option value="">Todas as áreas</option>
@@ -125,7 +125,7 @@ export function EquipmentPage() {
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-lg px-3 py-2 text-sm outline-none"
+          className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none sm:flex-none"
           style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}
         >
           <option value="">Todos os tipos</option>
@@ -150,7 +150,7 @@ export function EquipmentPage() {
           <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--color-text-muted)' }}>
             {section.name}
           </h3>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
             {section.items.map((eq) => {
               const linkedModule = eq.module_id ? moduleById.get(eq.module_id) : undefined
               return (
@@ -165,7 +165,7 @@ export function EquipmentPage() {
                     <CardPhoto equipmentId={eq.id} color={eq.color} hasPhoto={eq.has_photo} />
                     {linkedModule && <ModuleStatusBadge module={linkedModule} />}
                   </div>
-                  <div className="p-3.5">
+                  <div className="min-w-0 p-3 md:p-3.5">
                     <div className="truncate font-medium">{eq.display_name}</div>
                     {eq.description && (
                       <div className="mt-1 line-clamp-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>

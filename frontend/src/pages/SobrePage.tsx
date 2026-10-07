@@ -56,7 +56,7 @@ export function SobrePage() {
   }, [])
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
+    <div className="mx-auto max-w-2xl p-4 md:p-6">
       <div className="flex flex-col items-center gap-4 text-center">
         <img src={horunIcon} alt="" className="h-16 w-16 rounded-2xl" />
         <h1 className="text-2xl font-semibold" style={{ color: 'var(--color-primary)' }}>Horun</h1>
@@ -71,7 +71,7 @@ export function SobrePage() {
         </p>
 
         <dl
-          className="grid w-full grid-cols-2 gap-2 rounded-2xl border p-4 text-left text-sm"
+          className="grid w-full grid-cols-1 gap-x-2 gap-y-1 rounded-2xl border p-4 text-left text-sm sm:grid-cols-2 sm:gap-2 [&>dd]:mb-2 sm:[&>dd]:mb-0"
           style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
         >
           <dt style={{ color: 'var(--color-text-muted)' }}>Núcleo (Core)</dt>
@@ -84,7 +84,7 @@ export function SobrePage() {
               href="https://github.com/guimneves/Horun-Core"
               target="_blank"
               rel="noreferrer"
-              className="hover:underline"
+              className="inline-flex min-h-10 items-center break-all hover:underline md:min-h-0"
               style={{ color: 'var(--color-primary)' }}
             >
               github.com/guimneves/Horun-Core

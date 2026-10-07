@@ -18,7 +18,7 @@ type DetailTab = (typeof TABS)[number]
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+    <div className="min-w-0 rounded-2xl border p-4 md:p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
       {children}
     </div>
   )
@@ -29,7 +29,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
-      className="text-xs underline"
+      className="min-h-10 md:min-h-0 text-xs underline"
       style={{ color: 'var(--color-text-muted)' }}
       onClick={async () => {
         try {
@@ -190,32 +190,32 @@ export function EquipmentDetailPage() {
   if (!eq) return null
 
   return (
-    <div className="mx-auto max-w-[980px] p-6">
+    <div className="mx-auto max-w-[980px] p-3 md:p-6">
       <button
         onClick={() => navigate('/equipamentos')}
-        className="mb-4 flex items-center gap-1.5 text-sm"
+        className="mb-2 flex min-h-10 md:min-h-0 items-center gap-1.5 text-sm md:mb-4"
         style={{ color: 'var(--color-text-muted)' }}
       >
         <ChevronLeftIcon width={14} height={14} />
         Equipamentos
       </button>
 
-      <div className="mb-6 flex items-start justify-between">
-        <div className="flex items-center gap-4">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between md:mb-6">
+        <div className="flex min-w-0 items-center gap-4">
           <div style={{ viewTransitionName: `equipment-photo-${eq.id}` }}>
             <EquipmentPhoto equipmentId={eq.id} color={eq.color} hasPhoto={eq.has_photo} size={72} />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             {isAdmin ? (
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={() => name !== eq.display_name && save({ display_name: name })}
-                className="-mx-1 rounded px-1 text-2xl font-semibold outline-none"
+                className="-mx-1 w-full min-w-0 rounded px-1 text-xl font-semibold outline-none md:text-2xl"
                 style={{ background: 'transparent' }}
               />
             ) : (
-              <div className="text-2xl font-semibold">{eq.display_name}</div>
+              <div className="break-words text-xl font-semibold md:text-2xl">{eq.display_name}</div>
             )}
             <div className="mt-1 text-sm" style={{ color: 'var(--color-text-muted)' }}>
               {areas.find((a) => a.id === eq.area_id)?.name ?? 'Sem área'}
@@ -224,19 +224,19 @@ export function EquipmentDetailPage() {
         </div>
 
         {isAdmin && (
-          <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 sm:flex-col sm:items-end sm:gap-1.5">
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoChange} />
             <div className="flex gap-2.5 text-xs">
-              <button disabled={photoBusy} className="underline" style={{ color: 'var(--color-primary)' }} onClick={() => fileInputRef.current?.click()}>
+              <button disabled={photoBusy} className="min-h-10 md:min-h-0 underline" style={{ color: 'var(--color-primary)' }} onClick={() => fileInputRef.current?.click()}>
                 {eq.has_photo ? 'trocar foto' : 'enviar foto'}
               </button>
               {eq.has_photo && (
-                <button disabled={photoBusy} className="underline" style={{ color: 'var(--color-text-muted)' }} onClick={handleRemovePhoto}>
+                <button disabled={photoBusy} className="min-h-10 md:min-h-0 underline" style={{ color: 'var(--color-text-muted)' }} onClick={handleRemovePhoto}>
                   remover foto
                 </button>
               )}
             </div>
-            <button onClick={handleDelete} className="text-xs underline" style={{ color: '#d43b3b' }}>
+            <button onClick={handleDelete} className="min-h-10 md:min-h-0 text-xs underline" style={{ color: '#d43b3b' }}>
               remover equipamento
             </button>
           </div>
@@ -245,12 +245,12 @@ export function EquipmentDetailPage() {
 
       {error && <p className="mb-4 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
-      <div className="mb-5 flex gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <div className="mb-5 flex gap-5 overflow-x-auto md:gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
         {TABS.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className="pb-2.5 pt-1 text-[13.5px]"
+            className="min-h-10 flex-shrink-0 whitespace-nowrap pb-2.5 pt-1 text-[13.5px] md:min-h-0"
             style={{
               color: tab === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
               fontWeight: tab === t ? 600 : 400,
@@ -271,7 +271,7 @@ export function EquipmentDetailPage() {
       {tab === 'Agenda' && <EquipmentWeekGrid equipment={eq} />}
 
       {tab === 'Informações' && (
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
         <Card>
           <label className={labelCls} style={labelStyle}>Área</label>
           {isAdmin ? (
@@ -462,7 +462,7 @@ export function EquipmentDetailPage() {
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className={labelCls} style={labelStyle}>Número de série</label>
               {isAdmin ? (

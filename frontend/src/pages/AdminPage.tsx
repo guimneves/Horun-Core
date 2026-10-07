@@ -50,7 +50,7 @@ function slugify(raw: string): string {
 function Table({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="flex-1 overflow-hidden rounded-2xl border"
+      className="min-w-0 flex-1 overflow-x-auto rounded-2xl border"
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
       <table className="w-full border-collapse">{children}</table>
@@ -79,7 +79,7 @@ function Td({ children, right }: { children: React.ReactNode; right?: boolean })
 
 function CreatePanel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="w-[300px] flex-shrink-0 rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+    <div className="w-full flex-shrink-0 rounded-2xl border p-4 md:w-[300px] md:p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
       <div className="mb-4 text-[14.5px] font-semibold">{title}</div>
       {children}
     </div>
@@ -95,7 +95,7 @@ function FieldInput(props: React.InputHTMLAttributes<HTMLInputElement> & { label
       </label>
       <input
         {...rest}
-        className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+        className="min-h-10 w-full rounded-lg px-3 py-2 text-[13px] outline-none md:min-h-0"
         style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
       />
     </div>
@@ -123,7 +123,7 @@ function FieldSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+        className="min-h-10 w-full rounded-lg px-3 py-2 text-[13px] outline-none md:min-h-0"
         style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
       >
         <option value="">{placeholder}</option>
@@ -141,7 +141,7 @@ function PrimaryButton({ children, ...rest }: React.ButtonHTMLAttributes<HTMLBut
   return (
     <button
       {...rest}
-      className="w-full rounded-lg py-2.5 text-[13px] font-semibold disabled:opacity-50"
+      className="min-h-10 w-full rounded-lg py-2.5 text-[13px] font-semibold disabled:opacity-50"
       style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
     >
       {children}
@@ -155,19 +155,21 @@ function SmallSelect({
   options,
   placeholder,
   disabled,
+  className = '',
 }: {
   value: string
   onChange: (value: string) => void
   options: readonly string[]
   placeholder: string
   disabled?: boolean
+  className?: string
 }) {
   return (
     <select
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md px-2 py-1 text-xs outline-none disabled:opacity-50"
+      className={`min-h-10 rounded-md px-2 py-1 text-xs outline-none disabled:opacity-50 md:min-h-0 ${className}`}
       style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
     >
       <option value="">{placeholder}</option>
@@ -261,8 +263,8 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   }
 
   return (
-    <div className="flex gap-5">
-      <div className="flex-1">
+    <div className="flex flex-col gap-5 md:flex-row">
+      <div className="min-w-0 flex-1">
         {(justCreated || regenerated) && (
           <div
             className="mb-4 rounded-xl border p-4 text-[13px]"
@@ -283,7 +285,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 {(justCreated ?? regenerated)!.code}
               </code>
               <button
-                className="text-xs"
+                className="min-h-10 md:min-h-0 text-xs"
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={() => {
                   setJustCreated(null)
@@ -296,6 +298,88 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
           </div>
         )}
 
+        {/* Celular: um usuário = um cartão (a tabela fica para o desktop). */}
+        <div className="flex flex-col gap-2.5 md:hidden">
+          {users.map((u) => (
+            <div key={u.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+              <div className="flex items-center gap-2.5">
+                <Avatar name={u.display_name || u.username} size={34} userId={u.id} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-medium">{u.display_name || u.username}</div>
+                  <div className="truncate text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>
+                    @{u.username}
+                  </div>
+                </div>
+                <span
+                  className="flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ color: u.level <= 2 ? 'var(--color-primary)' : 'var(--color-text-muted)', background: 'var(--color-surface)' }}
+                >
+                  {u.level} · {u.level_label}
+                </span>
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <label className="min-w-0 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                  Posição
+                  <SmallSelect
+                    className="mt-0.5 w-full"
+                    value={u.position}
+                    disabled={u.is_protected}
+                    placeholder="—"
+                    options={POSITIONS}
+                    onChange={(value) => runAction(api.updateUser(u.id, { position: value }))}
+                  />
+                </label>
+                <label className="min-w-0 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+                  Qualificação
+                  <SmallSelect
+                    className="mt-0.5 w-full"
+                    value={u.qualification}
+                    disabled={u.is_protected}
+                    placeholder="—"
+                    options={QUALIFICATIONS}
+                    onChange={(value) => runAction(api.updateUser(u.id, { qualification: value }))}
+                  />
+                </label>
+              </div>
+              {(u.is_protected || u.setup_code) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {u.is_protected && (
+                    <span className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold" style={{ color: 'var(--color-text-muted)', background: 'var(--color-surface)' }}>
+                      Protegida
+                    </span>
+                  )}
+                  {u.setup_code && (
+                    <span className="rounded-full px-2.5 py-1 text-[11.5px] font-semibold" style={{ color: '#a3690f', background: 'var(--color-surface)' }}>
+                      Aguardando 1º acesso
+                    </span>
+                  )}
+                </div>
+              )}
+              {!u.is_protected && (
+                <div className="mt-1 flex flex-wrap gap-x-5">
+                  <button className="min-h-10 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
+                    renomear
+                  </button>
+                  <button className="min-h-10 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
+                    {u.setup_code ? 'ver código' : 'gerar novo acesso'}
+                  </button>
+                  <button
+                    className="min-h-10 text-xs"
+                    style={{ color: '#d43b3b' }}
+                    onClick={() => {
+                      if (confirm(`Excluir o usuário "${u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
+                        runAction(api.deleteUser(u.id))
+                    }}
+                  >
+                    remover
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden md:flex">
         <Table>
           <thead>
             <tr>
@@ -375,18 +459,18 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                 <Td right>
                   <div className="flex items-center justify-end gap-3">
                     {!u.is_protected && (
-                      <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
+                      <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRename(u)}>
                         renomear
                       </button>
                     )}
                     {!u.is_protected && (
-                      <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
+                      <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
                         {u.setup_code ? 'ver código' : 'gerar novo acesso'}
                       </button>
                     )}
                     {!u.is_protected && (
                       <button
-                        className="text-xs"
+                        className="min-h-10 md:min-h-0 text-xs"
                         style={{ color: '#d43b3b' }}
                         onClick={() => {
                           if (confirm(`Excluir o usuário "${u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
@@ -402,6 +486,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
             ))}
           </tbody>
         </Table>
+        </div>
       </div>
 
       <CreatePanel title="Novo usuário">
@@ -689,7 +774,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
   }
 
   return (
-    <div className="flex gap-5">
+    <div className="flex flex-col gap-5 md:flex-row">
       <Table>
         <thead>
           <tr>
@@ -723,7 +808,7 @@ function ModulesTab({ modules, users, onChange }: { modules: ModuleFull[]; users
               </Td>
               <Td right>
                 <button
-                  className="text-xs"
+                  className="min-h-10 md:min-h-0 text-xs"
                   style={{ color: '#d43b3b' }}
                   onClick={() => {
                     // permissões e créditos do módulo somem junto; equipamento
@@ -801,10 +886,10 @@ function ChipGroup({
             style={{ background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }}
           >
             {item.name}
-            <button onClick={() => onRename(item)} style={{ color: 'var(--color-text-muted)' }}>
+            <button onClick={() => onRename(item)} className="min-h-10 md:min-h-0" style={{ color: 'var(--color-text-muted)' }}>
               editar
             </button>
-            <button onClick={() => onDelete(item)} style={{ color: '#d43b3b' }}>
+            <button onClick={() => onDelete(item)} className="min-h-10 md:min-h-0" style={{ color: '#d43b3b' }}>
               remover
             </button>
           </span>
@@ -817,7 +902,7 @@ function ChipGroup({
             className="rounded-full px-3 py-1.5 text-xs outline-none"
             style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
           />
-          <button onClick={handleCreate} className="text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
+          <button onClick={handleCreate} className="min-h-10 md:min-h-0 text-xs font-semibold" style={{ color: 'var(--color-primary)' }}>
             + adicionar
           </button>
         </span>
@@ -909,8 +994,8 @@ function EquipmentTab({
   }
 
   return (
-    <div className="flex gap-5">
-      <div className="flex-1">
+    <div className="flex flex-col gap-5 md:flex-row">
+      <div className="min-w-0 flex-1">
         {loadError && (
           <p className="mb-3 text-sm" style={{ color: '#d43b3b' }}>
             {loadError}
@@ -941,18 +1026,18 @@ function EquipmentTab({
                 <Td>{areas.find((a) => a.id === eq.area_id)?.name ?? '—'}</Td>
                 <Td>{types.find((t) => t.id === eq.type_id)?.name ?? '—'}</Td>
                 <Td right>
-                  <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRenameEquipment(eq)}>
+                  <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRenameEquipment(eq)}>
                     renomear
                   </button>
                   <button
-                    className="ml-3 text-xs"
+                    className="min-h-10 md:min-h-0 ml-3 text-xs"
                     style={{ color: 'var(--color-text-muted)' }}
                     onClick={() => handleRenameEquipmentId(eq)}
                   >
                     renomear id
                   </button>
                   <button
-                    className="ml-3 text-xs"
+                    className="min-h-10 md:min-h-0 ml-3 text-xs"
                     style={{ color: '#d43b3b' }}
                     onClick={() => {
                       if (!confirm(`Excluir o equipamento "${eq.display_name}"? Essa ação não pode ser desfeita.`)) return
@@ -1117,7 +1202,7 @@ function PermissionsTab({
   return (
     <div className="rounded-2xl border p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
       <select
-        className="mb-4 rounded-lg px-3 py-2 text-sm outline-none"
+        className="mb-4 min-h-10 w-full rounded-lg px-3 py-2 text-sm outline-none md:min-h-0 md:w-auto"
         style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
         value={moduleId}
         onChange={(e) => setModuleId(e.target.value)}
@@ -1186,7 +1271,7 @@ function PermissionsTab({
                 {access.map((a) => (
                   <li key={a.user_id} className="flex items-center justify-between py-2 text-sm">
                     <span>{a.username}</span>
-                    <button className="text-xs" style={{ color: '#d43b3b' }} onClick={() => api.revokeModuleAccess(moduleId, a.user_id).then(reloadAccess)}>
+                    <button className="min-h-10 md:min-h-0 text-xs" style={{ color: '#d43b3b' }} onClick={() => api.revokeModuleAccess(moduleId, a.user_id).then(reloadAccess)}>
                       revogar
                     </button>
                   </li>
@@ -1198,9 +1283,9 @@ function PermissionsTab({
                 )}
               </ul>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <select
-                  className="rounded-lg px-3 py-2 text-sm outline-none"
+                  className="min-h-10 min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none md:min-h-0 md:flex-none"
                   style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
                   value={selectedUserId ?? ''}
                   onChange={(e) => setSelectedUserId(Number(e.target.value) || null)}
@@ -1287,7 +1372,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
   }
 
   return (
-    <div className="flex gap-5">
+    <div className="flex flex-col gap-5 md:flex-row">
       <Table>
         <thead>
           <tr>
@@ -1301,7 +1386,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
           {groups.map((g) => (
             <tr key={g.id} style={selected?.id === g.id ? { background: 'var(--color-surface)' } : undefined}>
               <Td>
-                <button className="flex items-center gap-2.5" onClick={() => setSelected(g)}>
+                <button className="flex min-h-10 md:min-h-0 items-center gap-2.5" onClick={() => setSelected(g)}>
                   <span className="h-3 w-3 flex-shrink-0 rounded" style={{ background: g.color }} />
                   <span className="font-medium">{g.name}</span>
                 </button>
@@ -1309,11 +1394,11 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
               <Td>{g.internal_admin_name}</Td>
               <Td>{g.member_count}</Td>
               <Td right>
-                <button className="text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => setSelected(g)}>
+                <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => setSelected(g)}>
                   gerenciar
                 </button>
                 <button
-                  className="ml-3 text-xs"
+                  className="min-h-10 md:min-h-0 ml-3 text-xs"
                   style={{ color: '#d43b3b' }}
                   onClick={() => {
                     if (!confirm(`Excluir o grupo "${g.name}"? Os avisos e eventos dele são apagados.`)) return
@@ -1353,7 +1438,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
                   <span className="text-[11px]" style={{ color: 'var(--color-primary)' }}>admin interno</span>
                 ) : (
                   <button
-                    className="text-[11px]"
+                    className="min-h-10 md:min-h-0 text-[11px]"
                     style={{ color: '#d43b3b' }}
                     onClick={() => api.removeGroupMember(selected.id, m.user_id).then(refreshSelected)}
                   >
@@ -1366,7 +1451,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
 
           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Adicionar</label>
           <select
-            className="mb-3 w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+            className="mb-3 min-h-10 w-full rounded-lg px-3 py-2 text-[13px] outline-none md:min-h-0"
             style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
             value=""
             onChange={(e) => {
@@ -1383,7 +1468,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
 
           <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Admin interno</label>
           <select
-            className="mb-3 w-full rounded-lg px-3 py-2 text-[13px] outline-none"
+            className="mb-3 min-h-10 w-full rounded-lg px-3 py-2 text-[13px] outline-none md:min-h-0"
             style={{ background: 'var(--color-surface)', color: 'var(--color-text)' }}
             value={selected.internal_admin_id}
             onChange={(e) => api.updateGroup(selected.id, { internal_admin_id: Number(e.target.value) }).then(refreshSelected)}
@@ -1480,7 +1565,7 @@ export function AdminPage() {
   useEffect(reloadTypes, [])
 
   return (
-    <div className="p-6">
+    <div className="p-3 md:p-6">
       <div className="mb-1 text-xl font-semibold">Administração</div>
       <div className="mb-5 text-[13.5px]" style={{ color: 'var(--color-text-muted)' }}>
         {user?.can.manage_users
@@ -1488,12 +1573,12 @@ export function AdminPage() {
           : 'Equipamentos, áreas e tipos do laboratório.'}
       </div>
 
-      <div className="mb-5 flex gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
+      <div className="mb-5 flex gap-5 overflow-x-auto md:gap-6" style={{ borderBottom: '1px solid var(--color-border)' }}>
         {visibleTabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className="pb-2.5 pt-1 text-[13.5px]"
+            className="min-h-10 flex-shrink-0 whitespace-nowrap pb-2.5 pt-1 text-[13.5px] md:min-h-0"
             style={{
               color: tab === t ? 'var(--color-primary)' : 'var(--color-text-muted)',
               fontWeight: tab === t ? 600 : 400,

@@ -6,7 +6,7 @@ import { SearchIcon } from '../icons'
 function Card({ person }: { person: DirectoryEntry }) {
   return (
     <div
-      className="flex flex-col gap-3 rounded-2xl border p-5"
+      className="flex min-w-0 flex-col gap-3 rounded-2xl border p-4 md:p-5"
       style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
     >
       <div className="flex items-center gap-3">
@@ -69,8 +69,8 @@ export function ColaboradoresPage() {
   }, [people, q])
 
   return (
-    <div className="p-6">
-      <div className="mb-5 text-xl font-semibold">Colaboradores</div>
+    <div className="p-3 md:p-6">
+      <div className="mb-4 text-xl font-semibold md:mb-5">Colaboradores</div>
 
       <div
         className="mb-5 flex w-full max-w-[360px] items-center gap-2.5 rounded-full px-3.5 py-2"
@@ -92,7 +92,7 @@ export function ColaboradoresPage() {
         <p style={{ color: 'var(--color-text-muted)' }}>Ninguém encontrado.</p>
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(260px,100%),1fr))] gap-3 md:gap-4">
         {filtered.map((p) => (
           <Card key={p.id} person={p} />
         ))}

@@ -27,17 +27,27 @@ export function ReservationPanel({
   canEdit,
   onDone,
   onClose,
+  initialDate,
+  bare = false,
 }: {
   equipment: Equipment[]
   initial?: Reservation
   canEdit: boolean
   onDone: () => void
   onClose: () => void
+  /** Data sugerida para uma reserva nova (AAAA-MM-DD) — ignorada se for antes de amanhã. */
+  initialDate?: string
+  /** Sem borda/cartão próprio: o painel está dentro de uma janela (celular). */
+  bare?: boolean
 }) {
   const editing = !!initial
   const [equipmentId, setEquipmentId] = useState(initial?.equipment_id ?? equipment[0]?.id ?? '')
   const [title, setTitle] = useState(initial?.title ?? '')
-  const [date, setDate] = useState(initial ? toLocalInputDate(new Date(initial.start_at)) : toLocalInputDate(tomorrow()))
+  const [date, setDate] = useState(() => {
+    if (initial) return toLocalInputDate(new Date(initial.start_at))
+    const min = toLocalInputDate(tomorrow())
+    return initialDate && initialDate >= min ? initialDate : min
+  })
   const [start, setStart] = useState(initial ? new Date(initial.start_at).toTimeString().slice(0, 5) : '09:00')
   const [end, setEnd] = useState(initial ? new Date(initial.end_at).toTimeString().slice(0, 5) : '10:00')
   const [error, setError] = useState<string | null>(null)
@@ -78,7 +88,10 @@ export function ReservationPanel({
   }
 
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
+    <div
+      className={bare ? 'px-4 pb-6 pt-1' : 'rounded-2xl border p-4'}
+      style={bare ? undefined : { borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+    >
       <div className="mb-3 text-sm font-semibold">{editing ? 'Reserva' : 'Nova reserva'}</div>
 
       <label className={labelCls} style={labelStyle}>Equipamento</label>
@@ -116,16 +129,16 @@ export function ReservationPanel({
       {error && <p className="mb-3 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
       {readOnly ? (
-        <button onClick={onClose} className="w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+        <button onClick={onClose} className="min-h-10 w-full rounded-lg border py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
       ) : (
         <div className="flex gap-2">
-          <button onClick={save} disabled={busy} className="flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
+          <button onClick={save} disabled={busy} className="min-h-10 flex-1 rounded-lg py-2 text-[13px] font-semibold disabled:opacity-50" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}>
             {editing ? 'Salvar' : 'Reservar'}
           </button>
           {editing && (
-            <button onClick={remove} disabled={busy} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
+            <button onClick={remove} disabled={busy} className="min-h-10 rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)', color: '#d43b3b' }}>Excluir</button>
           )}
-          <button onClick={onClose} className="rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+          <button onClick={onClose} className="min-h-10 rounded-lg border px-3.5 py-2 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
         </div>
       )}
     </div>

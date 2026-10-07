@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type Equipment, type Reservation } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from '../icons'
 import { toLocalIso } from '../lib/datetime'
 import { ReservationPanel } from './ReservationPanel'
+import { BottomSheet } from './BottomSheet'
+import { DayNav } from './DayNav'
+import { useIsMobile } from '../lib/useIsMobile'
 
 const START_HOUR = 8
 const END_HOUR = 19
@@ -38,6 +41,14 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [panel, setPanel] = useState<'new' | Reservation | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const isMobile = useIsMobile()
+  // Celular: um dia por vez (a semana carregada acompanha o dia escolhido).
+  const [selectedDay, setSelectedDay] = useState<Date>(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
+  const closePanel = useCallback(() => setPanel(null), [])
 
   const monday = useMemo(() => addDays(getMonday(new Date()), weekOffset * 7), [weekOffset])
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(monday, i)), [monday])
@@ -58,6 +69,81 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
 
   const canEdit = (r: Reservation) => r.user_id === user?.id || !!user?.can.moderate
   const rangeLabel = `${days[0].getDate()} – ${days[6].getDate()} de ${days[6].toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`
+
+  function goToDay(d: Date) {
+    const day = new Date(d)
+    day.setHours(0, 0, 0, 0)
+    setSelectedDay(day)
+    setWeekOffset(Math.round((getMonday(day).getTime() - getMonday(new Date()).getTime()) / (7 * 24 * 3600 * 1000)))
+  }
+
+  function renderPanel(bare: boolean) {
+    if (panel === 'new')
+      return (
+        <ReservationPanel
+          equipment={[equipment]}
+          canEdit
+          onDone={reload}
+          onClose={closePanel}
+          initialDate={isMobile ? toLocalIso(selectedDay).slice(0, 10) : undefined}
+          bare={bare}
+        />
+      )
+    if (panel) return <ReservationPanel equipment={[equipment]} initial={panel} canEdit={canEdit(panel)} onDone={reload} onClose={closePanel} bare={bare} />
+    return null
+  }
+
+  // ── Celular: lista das reservas do dia em vez da grade da semana ──
+  if (isMobile) {
+    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const dayReservations = reservations
+      .filter((r) => isSameDay(new Date(r.start_at), selectedDay))
+      .sort((a, b) => a.start_at.localeCompare(b.start_at))
+    return (
+      <div className="flex flex-col gap-3">
+        <DayNav day={selectedDay} weekDays={days} onChange={goToDay} />
+        <button
+          onClick={() => setPanel('new')}
+          className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold"
+          style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+        >
+          <PlusIcon width={12} height={12} />
+          Reservar
+        </button>
+        {loadError && <p className="text-xs" style={{ color: '#d43b3b' }}>{loadError}</p>}
+        <div className="flex flex-col gap-2">
+          {dayReservations.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => setPanel(r)}
+              className="flex items-stretch gap-3 rounded-xl border px-3 py-2.5 text-left"
+              style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+            >
+              <div className="w-[52px] flex-shrink-0 text-[12.5px] font-semibold tabular-nums">
+                {fmt(r.start_at)}
+                <div className="font-normal" style={{ color: 'var(--color-text-muted)' }}>{fmt(r.end_at)}</div>
+              </div>
+              <div className="w-[3px] flex-shrink-0 rounded" style={{ background: equipment.color }} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[14px] font-semibold">{r.title || 'Reserva'}</div>
+                <div className="truncate text-[12.5px]" style={{ color: 'var(--color-text-muted)' }}>{r.user_display_name}</div>
+              </div>
+            </button>
+          ))}
+          {dayReservations.length === 0 && !loadError && (
+            <p className="rounded-xl border border-dashed px-3 py-6 text-center text-[13px]" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+              Nenhuma reserva neste dia.
+            </p>
+          )}
+        </div>
+        {panel && (
+          <BottomSheet label="Reserva" onClose={closePanel}>
+            {renderPanel(true)}
+          </BottomSheet>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex gap-5">
@@ -152,15 +238,7 @@ export function EquipmentWeekGrid({ equipment }: { equipment: Equipment }) {
         </div>
       </div>
 
-      {panel && (
-        <div className="w-[280px] flex-shrink-0">
-          {panel === 'new' ? (
-            <ReservationPanel equipment={[equipment]} canEdit onDone={reload} onClose={() => setPanel(null)} />
-          ) : (
-            <ReservationPanel equipment={[equipment]} initial={panel} canEdit={canEdit(panel)} onDone={reload} onClose={() => setPanel(null)} />
-          )}
-        </div>
-      )}
+      {panel && <div className="w-[280px] flex-shrink-0">{renderPanel(false)}</div>}
     </div>
   )
 }
