@@ -525,7 +525,7 @@ export function EquipmentDetailPage() {
           <p className="mb-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
             Imprima e cole na bancada — aponta direto pra esta página.
           </p>
-          <EquipmentQrCode equipmentName={eq.display_name} />
+          <EquipmentQrCode equipmentId={eq.id} equipmentName={eq.display_name} />
         </Card>
       </div>
       )}

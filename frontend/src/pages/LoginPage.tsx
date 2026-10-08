@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import horunIcon from '../assets/horun-icon.png'
@@ -7,9 +7,17 @@ import nqtrLogo from '../assets/nqtr-logo.png'
 
 type Mode = 'login' | 'primeiro-acesso'
 
+/** Só caminhos internos ("/equipamentos/x"); nunca outro site ("//x", "https://"). */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\') || raw.startsWith('/login')) return '/'
+  return raw
+}
+
 export function LoginPage() {
-  const { login, setPassword: submitSetPassword } = useAuth()
+  const { user, login, setPassword: submitSetPassword } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const next = safeNext(params.get('next'))
   const [mode, setMode] = useState<Mode>('login')
 
   const [username, setUsername] = useState('')
@@ -21,8 +29,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  function switchMode(next: Mode) {
-    setMode(next)
+  function switchMode(target: Mode) {
+    setMode(target)
     setError(null)
     setPassword('')
     setSetupCode('')
@@ -36,7 +44,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login(username, password)
-      navigate('/')
+      navigate(next, { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.status === 428) {
         // Conta sem senha ainda — leva direto pro fluxo de primeiro acesso,
@@ -61,13 +69,15 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await submitSetPassword(username, setupCode, newPassword)
-      navigate('/')
+      navigate(next, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao definir a senha')
     } finally {
       setSubmitting(false)
     }
   }
+
+  if (user) return <Navigate to={next} replace />
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>

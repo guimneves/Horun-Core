@@ -12,6 +12,7 @@
   "dependencies": {
     "@horun/design-system": "file:../design-system",
     "framer-motion": "^12.42.2",
+    "jspdf": "4.2.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

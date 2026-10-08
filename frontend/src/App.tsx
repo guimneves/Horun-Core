@@ -290,17 +290,25 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
+// Sem sessão: vai para o login levando o endereço pedido (?next=), para
+// voltar a ele depois — ex.: QR code do equipamento escaneado no celular.
+function LoginRedirect() {
+  const location = useLocation()
+  const next = `${location.pathname}${location.search}${location.hash}`
+  return <Navigate to={next && next !== '/' ? `/login?next=${encodeURIComponent(next)}` : '/login'} replace />
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <p className="p-6">Carregando…</p>
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <LoginRedirect />
   return <>{children}</>
 }
 
 function RequireAdminAccess({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <p className="p-6">Carregando…</p>
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <LoginRedirect />
   if (!canOpenAdmin(user)) return <Navigate to="/" replace />
   return <>{children}</>
 }

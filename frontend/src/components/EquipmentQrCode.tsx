@@ -3,15 +3,21 @@ import QRCode from 'qrcode'
 
 // QR code pra colar na bancada do equipamento — aponta pra própria
 // página de detalhe dele, então quem escaneia com o celular já cai lá.
-export function EquipmentQrCode({ equipmentName }: { equipmentName: string }) {
+/** Endereço que o QR code abre: sempre a página do equipamento, sem
+ * parâmetros da tela atual (filtros, ?next=, âncoras). */
+export function equipmentUrl(equipmentId: string): string {
+  return `${window.location.origin}/equipamentos/${encodeURIComponent(equipmentId)}`
+}
+
+export function EquipmentQrCode({ equipmentId, equipmentName }: { equipmentId: string; equipmentName: string }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    QRCode.toDataURL(window.location.href, { margin: 1, width: 220 })
+    QRCode.toDataURL(equipmentUrl(equipmentId), { margin: 1, width: 220 })
       .then(setDataUrl)
       // gerar o QR é local (sem rede); se falhar, o bloco só não aparece
       .catch(() => setDataUrl(null))
-  }, [])
+  }, [equipmentId])
 
   if (!dataUrl) return null
 

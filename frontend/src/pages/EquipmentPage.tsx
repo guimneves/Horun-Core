@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, api, API_BASE, type Equipment, type EquipmentArea, type EquipmentType, type ModuleStatus } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { timeAgo } from '../lib/datetime'
+import { downloadQrSheet } from '../lib/qrSheet'
 
 // Capa do card — diferente do EquipmentPhoto (tamanho fixo, usado como
 // avatar): aqui a imagem preenche o container responsivo (aspect-ratio
@@ -57,6 +58,11 @@ export function EquipmentPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const isAdmin = !!user?.can.manage_equipment
+  // PDF de QR codes: só o administrador máximo (nível 1)
+  const canPrintQr = user?.level === 1
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [printing, setPrinting] = useState(false)
 
   useEffect(() => {
     // Sem isto, uma falha aqui (ex. backend desatualizado numa coluna
@@ -99,9 +105,59 @@ export function EquipmentPage() {
     return rest.length > 0 ? [...named, { key: 'none' as const, name: 'Sem área', items: rest }] : named
   }, [filtered, areas])
 
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const stopSelecting = () => {
+    setSelecting(false)
+    setSelected(new Set())
+  }
+
+  async function makePdf() {
+    const areaName = new Map(areas.map((a) => [a.id, a.name]))
+    const typeName = new Map(types.map((t) => [t.id, t.name]))
+    // na ordem da tela (áreas, depois nome)
+    const chosen = sections.flatMap((sec) => sec.items).filter((eq) => selected.has(eq.id))
+    setPrinting(true)
+    setError(null)
+    try {
+      await downloadQrSheet(
+        chosen.map((eq) => ({
+          id: eq.id,
+          name: eq.display_name,
+          detail: [eq.area_id != null ? areaName.get(eq.area_id) : '', eq.type_id != null ? typeName.get(eq.type_id) : ''].filter(Boolean).join(' · '),
+        })),
+      )
+    } catch {
+      setError('Não foi possível gerar o PDF dos QR codes.')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   return (
     <div className="p-3 md:p-6">
-      <h2 className="mb-4 text-lg font-semibold md:mb-5">Equipamentos</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 md:mb-5">
+        <h2 className="text-lg font-semibold">Equipamentos</h2>
+        {canPrintQr && equipment.length > 0 && !selecting && (
+          <button
+            onClick={() => setSelecting(true)}
+            className="min-h-10 rounded-lg border px-3 text-sm md:min-h-9"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)', color: 'var(--color-text)' }}
+          >
+            QR codes em PDF
+          </button>
+        )}
+      </div>
+      {selecting && (
+        <p className="mb-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+          Toque nos equipamentos para escolher. O PDF sai em A4, 6 etiquetas por folha, com o QR code, o nome e o ícone do Horun.
+        </p>
+      )}
 
       <div className="mb-5 flex flex-wrap gap-2.5 md:mb-6">
         <input
@@ -158,9 +214,32 @@ export function EquipmentPage() {
                   key={eq.id}
                   to={`/equipamentos/${encodeURIComponent(eq.id)}`}
                   viewTransition
-                  className="group flex flex-col overflow-hidden rounded-2xl border transition-shadow hover:shadow-lg"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+                  onClick={(e) => {
+                    if (!selecting) return
+                    e.preventDefault()
+                    toggle(eq.id)
+                  }}
+                  aria-pressed={selecting ? selected.has(eq.id) : undefined}
+                  className="group relative flex flex-col overflow-hidden rounded-2xl border transition-shadow hover:shadow-lg"
+                  style={{
+                    borderColor: selecting && selected.has(eq.id) ? 'var(--color-primary)' : 'var(--color-border)',
+                    boxShadow: selecting && selected.has(eq.id) ? '0 0 0 2px var(--color-primary)' : undefined,
+                    background: 'var(--color-bg-elevated)',
+                  }}
                 >
+                  {selecting && (
+                    <span
+                      className="absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-md text-sm font-bold"
+                      style={{
+                        background: selected.has(eq.id) ? 'var(--color-primary)' : 'rgba(255,255,255,0.9)',
+                        color: selected.has(eq.id) ? '#fff' : 'transparent',
+                        border: '2px solid var(--color-primary)',
+                      }}
+                      aria-hidden="true"
+                    >
+                      ✓
+                    </span>
+                  )}
                   <div className="relative aspect-[4/3] overflow-hidden" style={{ viewTransitionName: `equipment-photo-${eq.id}` }}>
                     <CardPhoto equipmentId={eq.id} color={eq.color} hasPhoto={eq.has_photo} />
                     {linkedModule && <ModuleStatusBadge module={linkedModule} />}
@@ -187,6 +266,35 @@ export function EquipmentPage() {
           </div>
         </div>
       ))}
+
+      {selecting && (
+        <div
+          className="sticky bottom-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border p-2 shadow-lg"
+          style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}
+          role="region"
+          aria-label="QR codes em PDF"
+        >
+          <span className="mr-auto px-1 text-sm font-medium">{selected.size} selecionado(s)</span>
+          <button
+            onClick={() => setSelected(new Set(filtered.map((eq) => eq.id)))}
+            className="min-h-10 rounded-lg px-3 text-sm md:min-h-9"
+            style={{ color: 'var(--color-text)' }}
+          >
+            Todos os da tela
+          </button>
+          <button onClick={stopSelecting} className="min-h-10 rounded-lg px-3 text-sm md:min-h-9" style={{ color: 'var(--color-text-muted)' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={makePdf}
+            disabled={selected.size === 0 || printing}
+            className="min-h-10 rounded-lg px-4 text-sm font-medium disabled:opacity-50 md:min-h-9"
+            style={{ background: 'var(--color-primary)', color: '#fff' }}
+          >
+            {printing ? 'Gerando…' : `Gerar PDF (${Math.ceil(selected.size / 6) || 0} folha${Math.ceil(selected.size / 6) === 1 ? '' : 's'})`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
