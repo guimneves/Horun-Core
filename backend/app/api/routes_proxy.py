@@ -89,7 +89,10 @@ def build_forward_headers(incoming: dict[str, str], user) -> dict[str, str]:
     return headers
 
 
-def _has_access(session: SessionDep, user_id: int, sees_all: bool, module_id: str, module_public: bool) -> bool:
+def has_module_access(session: SessionDep, user_id: int, sees_all: bool, module_id: str, module_public: bool) -> bool:
+    """Quem entra no módulo: nível 1–2 (`sees_all`), módulo público ou
+    concessão individual. Também usada pela lista de usuários dos módulos
+    (routes_module_notify.py) — a regra mora só aqui."""
     if sees_all or module_public:
         return True
     grant = session.exec(
@@ -117,7 +120,7 @@ async def proxy(module_id: str, path: str, request: Request, user: CurrentUser, 
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
 
-    if not _has_access(session, user.id, is_coordinator_or_above(user), module_id, module.public):
+    if not has_module_access(session, user.id, is_coordinator_or_above(user), module_id, module.public):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para este módulo")
 
     is_api_call = path == "api" or path.startswith("api/")

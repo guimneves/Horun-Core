@@ -13,6 +13,10 @@ Autenticação: `Authorization: Bearer <chave do módulo>`, gerada pelo
 administrador na aba Módulos (só o hash fica no banco). A rota é chamada de
 servidor para servidor, pela rede Docker (`http://horun-core-backend:8000`).
 Contrato completo: Prompt_Horun_Modulo.md, seção 11.
+
+A mesma chave autentica `GET /internal/modules/{id}/users` — a lista de quem
+pode entrar no módulo (id do Core, nome, nível), para os módulos montarem
+seletores de pessoas sem esperar cada um abrir o módulo uma vez.
 """
 
 from __future__ import annotations
@@ -28,7 +32,8 @@ from sqlmodel import select
 from app.api.deps import ModuleAdminUser, SessionDep
 from app.core.email import notify_user_by_email
 from app.core.config import settings
-from app.core.permissions import user_level
+from app.api.routes_proxy import has_module_access
+from app.core.permissions import LEVEL_LABELS, LEVEL_SLUGS, is_coordinator_or_above, user_level
 from app.db.models import Module, Notification, User, UserModuleAccess
 
 router = APIRouter(tags=["module-notify"])
@@ -147,3 +152,37 @@ def module_notify(
             emailed += 1
     session.commit()
     return NotifyOut(notified=len(recipients), emailed=emailed)
+
+
+class ModuleUserOut(BaseModel):
+    id: int  # o mesmo valor de X-Horun-User-Id
+    username: str  # o mesmo de X-Horun-User
+    display_name: str  # nome completo se houver; senão o nome de exibição; senão o login
+    level: int  # o mesmo de X-Horun-Level (1 admin ... 5 IC)
+    level_name: str  # o mesmo de X-Horun-Level-Name (ASCII: admin, coordenador, ...)
+    level_label: str  # para mostrar na tela ("Coordenador(a)", "Técnico(a)"...)
+
+
+@router.get("/internal/modules/{module_id}/users", response_model=list[ModuleUserOut])
+def module_users(module_id: str, session: SessionDep, authorization: str | None = Header(default=None)):
+    """Quem pode entrar no módulo agora — mesma regra do proxy
+    (`has_module_access`). Fica de fora quem ainda não ativou a conta
+    (sem senha definida: nunca conseguiu entrar). Sem e-mail nem telefone."""
+    module = _module_from_token(session, module_id, authorization)
+    out: list[ModuleUserOut] = []
+    for user in session.exec(select(User)).all():
+        if user.password_hash is None:  # conta pendente (primeiro acesso não feito)
+            continue
+        if not has_module_access(session, user.id, is_coordinator_or_above(user), module.id, module.public):
+            continue
+        level = user_level(user)
+        out.append(ModuleUserOut(
+            id=user.id,
+            username=user.username,
+            display_name=user.full_name or user.display_name or user.username,
+            level=level,
+            level_name=LEVEL_SLUGS[level],
+            level_label=LEVEL_LABELS[level],
+        ))
+    out.sort(key=lambda u: u.display_name.casefold())
+    return out

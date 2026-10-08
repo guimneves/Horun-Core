@@ -102,3 +102,52 @@ def test_new_key_replaces_old_and_revoke(client, token, super_admin_client, admi
     assert super_admin_client.get("/modules").json()[0]["has_notify_token"] is True
     super_admin_client.delete(f"/modules/{module}/notify-token")
     assert _notify(client, new, levels=[2]).status_code == 401
+
+
+# ---- GET /internal/modules/{id}/users — lista de quem entra no módulo ----
+
+
+def _users(client, token, module_id="reagentes"):
+    return client.get(f"/internal/modules/{module_id}/users", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_users_list_refuses_wrong_or_missing_key(client, token):
+    assert _users(client, "outra-chave").status_code == 401
+    assert client.get("/internal/modules/reagentes/users").status_code == 401
+    assert _users(client, token, "nao-existe").status_code == 401
+
+
+def test_users_list_only_people_with_access(client, token, super_admin_client, super_admin_user, admin2, user_a, user_b, module):
+    super_admin_client.post(f"/modules/{module}/access", json={"user_id": user_a.id})
+    r = _users(client, token)
+    assert r.status_code == 200, r.text
+    ids = {u["id"] for u in r.json()}
+    # nível 1–2 entram em todo módulo; A tem concessão; B não tem
+    assert ids == {super_admin_user.id, admin2.id, user_a.id}
+    assert all(set(u) == {"id", "username", "display_name", "level", "level_name", "level_label"} for u in r.json())
+
+
+def test_users_list_levels_and_names(client, token, db_engine, super_admin_client, super_admin_user, admin2, user_a, module):
+    super_admin_client.post(f"/modules/{module}/access", json={"user_id": user_a.id})
+    with Session(db_engine) as s:
+        u = s.get(User, user_a.id)
+        u.position, u.full_name = "Técnico(a)", "Fulana de Teste"
+        s.add(u)
+        s.commit()
+    by_id = {u["id"]: u for u in _users(client, token).json()}
+    assert (by_id[super_admin_user.id]["level"], by_id[super_admin_user.id]["level_name"]) == (1, "admin")
+    assert (by_id[admin2.id]["level"], by_id[admin2.id]["level_label"]) == (2, "Coordenador(a)")
+    assert by_id[user_a.id] == {"id": user_a.id, "username": "usuario-a", "display_name": "Fulana de Teste",
+                                "level": 4, "level_name": "tecnico", "level_label": "Técnico(a)"}
+
+
+def test_users_list_public_module_and_pending_accounts(client, token, db_engine, super_admin_client, user_a, user_b, module):
+    with Session(db_engine) as s:
+        m = s.get(Module, module)
+        m.public = True
+        s.add(m)
+        s.add(User(username="pendente", display_name="pendente", password_hash=None, setup_code="abc"))
+        s.commit()
+    names = {u["username"] for u in _users(client, token).json()}
+    assert {"usuario-a", "usuario-b"} <= names  # módulo público: todos com conta ativa
+    assert "pendente" not in names  # ainda não fez o primeiro acesso

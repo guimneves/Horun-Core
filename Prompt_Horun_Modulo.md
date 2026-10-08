@@ -316,6 +316,16 @@ O módulo **não** guarda e-mail de ninguém nem configura SMTP: ele recebe só 
 
   `user_ids` (ids do Core, os do cabeçalho) e `levels` (1 admin, 2 coordenador, 3 pesquisador, 4 técnico, 5 IC) somam os destinatários; o Core **descarta quem não tem acesso ao módulo**. `link` é o caminho **dentro** do módulo (o Core monta `/m/<id>/...`). `email: false` = só o sininho (avisos de rotina). Resposta: `{"notified": n, "emailed": m}`; chave errada → 401.
 - **No módulo**: um `app/core/notify.py` com uma função `notify(subject, text="", link="", user_ids=(), levels=(), email=True)` que dispara a chamada **em segundo plano** (thread ou `BackgroundTasks`), com timeout curto, e **nunca** derruba a requisição se o Core estiver fora (só registra no log). Nos testes, substitua a função (monkeypatch) e confira o que seria enviado.
+- **Lista de pessoas do módulo** (mesma chave): para montar um seletor de pessoas ("responsável", "atribuir a...") sem esperar cada um abrir o módulo uma vez:
+
+  ```
+  GET {HORUN_CORE_URL}/internal/modules/<id>/users
+  Authorization: Bearer <HORUN_NOTIFY_TOKEN>
+  → [{"id": 12, "username": "fulana", "display_name": "Fulana de Tal",
+      "level": 3, "level_name": "pesquisador", "level_label": "Pesquisador(a)"}, ...]
+  ```
+
+  Só leitura. Vem **quem pode entrar no módulo agora** (a mesma regra do proxy: nível 1–2, módulo público ou concessão individual), sem as contas que ainda não fizeram o primeiro acesso; ordenado pelo nome. `id`, `username`, `level` e `level_name` são os mesmos valores dos cabeçalhos `X-Horun-User-Id`, `X-Horun-User`, `X-Horun-Level` e `X-Horun-Level-Name` (seção 5); `display_name` é o nome completo (ou o de exibição); `level_label` é a posição para mostrar na tela. **Sem e-mail nem telefone.** Chave errada ou módulo inexistente → 401. No módulo: cache curto em memória (~60 s), timeout curto, e **plano B** se o Core não responder ou as variáveis não estiverem definidas (ex. a lista de quem já abriu o módulo, guardada a partir dos cabeçalhos) — a tela nunca quebra por isso. Exemplo: `Horun-Resultados/backend/app/services/directory.py`.
 - **O que avisar**: eventos que pedem ação de alguém (algo esperando aprovação, prazo, estoque/saldo no limite, resultado pronto para quem pediu) — não cada clique. O texto do e-mail é texto simples, em português, e diz o que fazer; **não** ponha dados sensíveis além do necessário (o e-mail sai do servidor).
 
 ## 12. Manual de instruções — aba "Manual" (obrigatório)
