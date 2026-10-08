@@ -326,6 +326,16 @@ O módulo **não** guarda e-mail de ninguém nem configura SMTP: ele recebe só 
   ```
 
   Só leitura. Vem **quem pode entrar no módulo agora** (a mesma regra do proxy: nível 1–2, módulo público ou concessão individual), sem as contas que ainda não fizeram o primeiro acesso; ordenado pelo nome. `id`, `username`, `level` e `level_name` são os mesmos valores dos cabeçalhos `X-Horun-User-Id`, `X-Horun-User`, `X-Horun-Level` e `X-Horun-Level-Name` (seção 5); `display_name` é o nome completo (ou o de exibição); `level_label` é a posição para mostrar na tela. **Sem e-mail nem telefone.** Chave errada ou módulo inexistente → 401. No módulo: cache curto em memória (~60 s), timeout curto, e **plano B** se o Core não responder ou as variáveis não estiverem definidas (ex. a lista de quem já abriu o módulo, guardada a partir dos cabeçalhos) — a tela nunca quebra por isso. Exemplo: `Horun-Resultados/backend/app/services/directory.py`.
+- **Lista de equipamentos do Core** (mesma chave): para ligar registros do módulo a um equipamento sem manter cadastro paralelo:
+
+  ```
+  GET {HORUN_CORE_URL}/internal/modules/<id>/equipment
+  Authorization: Bearer <HORUN_NOTIFY_TOKEN>
+  → [{"id": "leco832", "display_name": "LECO 832", "area": "Sala de Análise Elementar",
+      "type": "Analisador elementar", "module_id": null, "manufacturer": "LECO", "model_name": "SC832"}, ...]
+  ```
+
+  Só leitura; **todos** os equipamentos, ordenados pelo nome. `id` é o slug estável do Core (guarde-o, não o nome); `area`/`type` vêm como nome ou `""`; `module_id` é o módulo ligado ao equipamento, se houver. Sem foto, AnyDesk, pasta de POPs, número de série nem patrimônio. Chave errada → 401. Mesmo cuidado da lista de pessoas: cache curto, timeout curto, e a tela não quebra se o Core não responder.
 - **O que avisar**: eventos que pedem ação de alguém (algo esperando aprovação, prazo, estoque/saldo no limite, resultado pronto para quem pediu) — não cada clique. O texto do e-mail é texto simples, em português, e diz o que fazer; **não** ponha dados sensíveis além do necessário (o e-mail sai do servidor).
 
 ## 12. Manual de instruções — aba "Manual" (obrigatório)

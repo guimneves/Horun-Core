@@ -7,7 +7,7 @@ from sqlmodel import Session
 
 from app.core import email as email_mod
 from app.core.config import settings
-from app.db.models import Module, User
+from app.db.models import Equipment, EquipmentArea, EquipmentType, Module, User
 
 
 @pytest.fixture()
@@ -151,3 +151,44 @@ def test_users_list_public_module_and_pending_accounts(client, token, db_engine,
     names = {u["username"] for u in _users(client, token).json()}
     assert {"usuario-a", "usuario-b"} <= names  # módulo público: todos com conta ativa
     assert "pendente" not in names  # ainda não fez o primeiro acesso
+
+
+# ---- GET /internal/modules/{id}/equipment — equipamentos do Core ----
+
+
+def _equipment(client, token, module_id="reagentes"):
+    return client.get(f"/internal/modules/{module_id}/equipment", headers={"Authorization": f"Bearer {token}"})
+
+
+def test_equipment_list_refuses_wrong_or_missing_key(client, token):
+    assert _equipment(client, "outra-chave").status_code == 401
+    assert client.get("/internal/modules/reagentes/equipment").status_code == 401
+    assert _equipment(client, token, "nao-existe").status_code == 401
+
+
+def test_equipment_list_names_order_and_no_sensitive_fields(client, token, db_engine, module):
+    with Session(db_engine) as s:
+        area = EquipmentArea(name="Sala de Cromatografia")
+        tipo = EquipmentType(name="Cromatógrafo gasoso")
+        s.add(area)
+        s.add(tipo)
+        s.commit()
+        s.add(Equipment(id="gc1", display_name="cromatógrafo GC", area_id=area.id, type_id=tipo.id,
+                        module_id="reagentes", manufacturer="Agilent", model_name="7890",
+                        anydesk_id="123 456 789", pop_folder_path=r"\srv\pops", serial_number="SN1",
+                        asset_tag="PAT-9"))
+        s.add(Equipment(id="balanca", display_name="Balança analítica"))
+        s.commit()
+    r = _equipment(client, token)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert [e["id"] for e in data] == ["balanca", "gc1"]  # ordem pelo nome, sem diferenciar maiúsculas
+    assert data[0] == {"id": "balanca", "display_name": "Balança analítica", "area": "", "type": "",
+                       "module_id": None, "manufacturer": "", "model_name": ""}
+    assert data[1] == {"id": "gc1", "display_name": "cromatógrafo GC", "area": "Sala de Cromatografia",
+                       "type": "Cromatógrafo gasoso", "module_id": "reagentes", "manufacturer": "Agilent",
+                       "model_name": "7890"}
+    for e in data:
+        for key in ("photo", "anydesk_id", "pop_folder_path", "serial_number", "asset_tag"):
+            assert key not in e
+    assert "123 456 789" not in r.text and "PAT-9" not in r.text and "SN1" not in r.text

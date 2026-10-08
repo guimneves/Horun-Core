@@ -16,7 +16,10 @@ Contrato completo: Prompt_Horun_Modulo.md, seção 11.
 
 A mesma chave autentica `GET /internal/modules/{id}/users` — a lista de quem
 pode entrar no módulo (id do Core, nome, nível), para os módulos montarem
-seletores de pessoas sem esperar cada um abrir o módulo uma vez.
+seletores de pessoas sem esperar cada um abrir o módulo uma vez — e
+`GET /internal/modules/{id}/equipment`, a lista de todos os equipamentos do
+Core (id, nome, área, tipo, fabricante, modelo), para os módulos ligarem
+seus registros a um equipamento sem manter um cadastro paralelo.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from app.core.email import notify_user_by_email
 from app.core.config import settings
 from app.api.routes_proxy import has_module_access
 from app.core.permissions import LEVEL_LABELS, LEVEL_SLUGS, is_coordinator_or_above, user_level
-from app.db.models import Module, Notification, User, UserModuleAccess
+from app.db.models import Equipment, EquipmentArea, EquipmentType, Module, Notification, User, UserModuleAccess
 
 router = APIRouter(tags=["module-notify"])
 
@@ -185,4 +188,37 @@ def module_users(module_id: str, session: SessionDep, authorization: str | None 
             level_label=LEVEL_LABELS[level],
         ))
     out.sort(key=lambda u: u.display_name.casefold())
+    return out
+
+
+class ModuleEquipmentOut(BaseModel):
+    id: str  # slug do equipamento no Core (ex. "re7s", "leco832")
+    display_name: str
+    area: str  # nome da área física (EquipmentArea) ou ""
+    type: str  # nome do tipo (EquipmentType) ou ""
+    module_id: str | None  # módulo de software ligado ao equipamento, se houver
+    manufacturer: str
+    model_name: str
+
+
+@router.get("/internal/modules/{module_id}/equipment", response_model=list[ModuleEquipmentOut])
+def module_equipment(module_id: str, session: SessionDep, authorization: str | None = Header(default=None)):
+    """Todos os equipamentos do Core, ordenados pelo nome. Só identificação:
+    sem foto, AnyDesk, pasta de POPs, número de série nem patrimônio."""
+    _module_from_token(session, module_id, authorization)
+    areas = {a.id: a.name for a in session.exec(select(EquipmentArea)).all()}
+    types = {t.id: t.name for t in session.exec(select(EquipmentType)).all()}
+    out = [
+        ModuleEquipmentOut(
+            id=eq.id,
+            display_name=eq.display_name,
+            area=areas.get(eq.area_id, "") if eq.area_id is not None else "",
+            type=types.get(eq.type_id, "") if eq.type_id is not None else "",
+            module_id=eq.module_id,
+            manufacturer=eq.manufacturer,
+            model_name=eq.model_name,
+        )
+        for eq in session.exec(select(Equipment)).all()
+    ]
+    out.sort(key=lambda e: e.display_name.casefold())
     return out
