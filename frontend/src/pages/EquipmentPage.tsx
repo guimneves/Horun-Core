@@ -58,8 +58,8 @@ export function EquipmentPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const isAdmin = !!user?.can.manage_equipment
-  // PDF de QR codes: só o administrador máximo (nível 1)
-  const canPrintQr = user?.level === 1
+  // PDF de QR codes: quem gerencia equipamentos (administrador máximo, coordenadores e técnicos)
+  const canPrintQr = isAdmin
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [printing, setPrinting] = useState(false)
