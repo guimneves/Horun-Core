@@ -45,6 +45,20 @@ export interface Capabilities {
   manage_equipment: boolean
   moderate: boolean
   read_suggestions: boolean
+  /** Ligar/desligar o cadastro automático (só o administrador máximo). */
+  manage_signup: boolean
+}
+
+/** Cadastro automático (tela de login → Primeiro acesso → Criar minha conta). */
+export interface SignupInfo {
+  enabled: boolean
+  username_rules: string
+  password_min: number
+}
+
+export interface SignupSettings {
+  enabled: boolean
+  email_configured: boolean
 }
 
 export interface CurrentUser {
@@ -317,6 +331,17 @@ export const api = {
     request<CurrentUser>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   me: () => request<CurrentUser>('/auth/me'),
+  signupInfo: () => request<SignupInfo>('/auth/signup'),
+  signupCode: (email: string, username: string) =>
+    request<{ sent: boolean; valid_minutes: number }>('/auth/signup/code', {
+      method: 'POST',
+      body: JSON.stringify({ email, username }),
+    }),
+  signupComplete: (payload: { email: string; username: string; code: string; password: string; password_confirm: string }) =>
+    request<CurrentUser>('/auth/signup/complete', { method: 'POST', body: JSON.stringify(payload) }),
+  getSignupSettings: () => request<SignupSettings>('/admin/signup-settings'),
+  putSignupSettings: (enabled: boolean) =>
+    request<SignupSettings>('/admin/signup-settings', { method: 'PUT', body: JSON.stringify({ enabled }) }),
   setPassword: (username: string, setupCode: string, newPassword: string) =>
     request<CurrentUser>('/auth/set-password', {
       method: 'POST',

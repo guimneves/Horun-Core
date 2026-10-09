@@ -1,11 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { ApiError } from '../api/client'
+import { api, ApiError, type SignupInfo } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { SignupForm } from '../components/SignupForm'
 import horunIcon from '../assets/horun-icon.png'
 import nqtrLogo from '../assets/nqtr-logo.png'
 
-type Mode = 'login' | 'primeiro-acesso'
+// criar-conta: cadastro automático (só quando o administrador máximo ligou)
+type Mode = 'login' | 'primeiro-acesso' | 'criar-conta'
 
 /** Só caminhos internos ("/equipamentos/x"); nunca outro site ("//x", "https://"). */
 function safeNext(raw: string | null): string {
@@ -14,7 +16,15 @@ function safeNext(raw: string | null): string {
 }
 
 export function LoginPage() {
-  const { user, login, setPassword: submitSetPassword } = useAuth()
+  const { user, login, setPassword: submitSetPassword, refreshUser } = useAuth()
+  const [signup, setSignup] = useState<SignupInfo | null>(null)
+
+  useEffect(() => {
+    api
+      .signupInfo()
+      .then(setSignup)
+      .catch(() => setSignup(null))
+  }, [])
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
@@ -112,7 +122,16 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center px-5 py-8 md:p-8">
         <div className="w-full max-w-[380px]">
           <img src={horunIcon} alt="Horun" className="mb-6 h-14 w-14 rounded-2xl md:h-16 md:w-16" />
-          {mode === 'login' ? (
+          {mode === 'criar-conta' && signup?.enabled ? (
+            <SignupForm
+              info={signup}
+              onBack={() => switchMode('login')}
+              onDone={async () => {
+                await refreshUser()
+                navigate(next, { replace: true })
+              }}
+            />
+          ) : mode === 'login' ? (
           <form onSubmit={handleLogin} className="w-full">
             <div className="mb-1 text-[22px] font-semibold">Entrar</div>
             <div className="mb-8 text-sm" style={{ color: 'var(--color-text-muted)' }}>
@@ -160,14 +179,31 @@ export function LoginPage() {
                 Primeiro acesso
               </button>
               <br />
-              Contas são criadas pelo administrador da plataforma.
+              {signup?.enabled ? 'Ainda não tem conta? Crie a sua em Primeiro acesso.' : 'Contas são criadas pelo administrador da plataforma.'}
             </p>
           </form>
         ) : (
           <form onSubmit={handleSetPassword} className="w-full">
             <div className="mb-1 text-[22px] font-semibold">Primeiro acesso</div>
+            {signup?.enabled && (
+              <div className="mb-6 rounded-xl p-4" style={{ border: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
+                <div className="mb-1 text-sm font-semibold">Ainda não tem conta?</div>
+                <div className="mb-3 text-[13px]" style={{ color: 'var(--color-text-muted)' }}>
+                  Crie a sua com o seu e-mail: você recebe um código de acesso e escolhe a senha.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => switchMode('criar-conta')}
+                  className="w-full rounded-lg py-2.5 text-sm font-semibold"
+                  style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+                >
+                  Criar minha conta
+                </button>
+              </div>
+            )}
             <div className="mb-8 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              Use o código de acesso que o administrador te passou para definir a sua própria senha.
+              {signup?.enabled ? 'Já tem uma conta criada pelo administrador? ' : ''}Use o código de acesso que o administrador te
+              passou para definir a sua própria senha.
             </div>
 
             <label className="mb-1.5 block text-[13px] font-medium">Usuário</label>

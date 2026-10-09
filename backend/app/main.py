@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from app.api import (
     routes_admin,
     routes_auth,
+    routes_signup,
     routes_equipment,
     routes_events,
     routes_groups,
@@ -75,6 +76,7 @@ async def reject_cross_site_writes(request: Request, call_next):
     return await call_next(request)
 
 app.include_router(routes_auth.router)
+app.include_router(routes_signup.router)
 app.include_router(routes_modules.router)
 app.include_router(routes_posts.router)
 app.include_router(routes_notifications.router)

@@ -386,3 +386,17 @@ class Reservation(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
     # lembrete de 1 h antes já enviado a quem reservou (services/calendar_notify.py)
     reminder_sent_at: Optional[NaiveDatetime] = None  # horário local do laboratório
+
+
+class SignupCode(SQLModel, table=True):
+    """Cadastro automático (Login → Primeiro acesso → Criar minha conta): o
+    código de 6 dígitos mandado por e-mail para confirmar o endereço antes de
+    criar a conta. Um por e-mail (o último pedido vale); só o hash do código
+    fica guardado. Ver api/routes_signup.py."""
+
+    email: str = Field(primary_key=True)  # sempre minúsculo
+    username: str
+    code_hash: str
+    attempts: int = 0
+    expires_at: datetime
+    created_at: datetime = Field(default_factory=utcnow)

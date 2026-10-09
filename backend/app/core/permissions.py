@@ -101,4 +101,6 @@ def capabilities(user: User) -> dict[str, bool]:
         "manage_equipment": can_manage_equipment(user),
         "moderate": can_moderate(user),
         "read_suggestions": user.is_protected,
+        # Ligar/desligar o cadastro automático (Administração → Acesso).
+        "manage_signup": user.is_protected,
     }

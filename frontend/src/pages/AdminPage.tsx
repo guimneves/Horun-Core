@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AdminAccessTab } from '../components/AdminAccessTab'
 import {
   api,
   ApiError,
@@ -17,7 +18,7 @@ import {
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
 
-const TABS = ['Usuários', 'Grupos', 'Módulos', 'Equipamentos', 'Permissões'] as const
+const TABS = ['Usuários', 'Grupos', 'Módulos', 'Equipamentos', 'Permissões', 'Acesso'] as const
 type Tab = (typeof TABS)[number]
 
 // Cada aba aparece para quem tem a capacidade correspondente (o backend
@@ -30,6 +31,8 @@ const TAB_CAPABILITY: Record<Tab, keyof CurrentUser['can']> = {
   Módulos: 'manage_modules',
   Equipamentos: 'manage_equipment',
   Permissões: 'manage_access',
+  // cadastro automático (a chave só o nível 1 muda) e QR code da página inicial
+  Acesso: 'manage_users',
 }
 
 // Nome de usuário e ids de equipamento/módulo têm que ser um slug (sem
@@ -1610,6 +1613,7 @@ export function AdminPage() {
           loadError={equipmentError}
         />
       )}
+      {tab === 'Acesso' && <AdminAccessTab />}
       {tab === 'Permissões' && <PermissionsTab modules={modules} users={users} onModulesChange={reloadModules} />}
     </div>
   )
