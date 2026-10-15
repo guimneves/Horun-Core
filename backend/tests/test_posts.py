@@ -176,3 +176,19 @@ def test_attachment_requires_auth(client, user_a_client):
         "/posts", data={"content": "x"}, files={"file": ("a.png", _FAKE_PNG, "image/png")}
     ).json()["id"]
     assert client.get(f"/posts/{post_id}/attachment").status_code == 401
+
+
+def test_attachment_download_with_non_latin1_filename(user_a_client):
+    # Bug real: nome com travessão/aspas curvas/acento decomposto dava 500
+    name = "Relatório – versão “final”.pdf"
+    r = user_a_client.post(
+        "/posts",
+        data={"content": "relatório"},
+        files={"file": (name, b"%PDF-1.4\n%%EOF\n", "application/pdf")},
+    )
+    assert r.status_code == 200, r.text
+    att = user_a_client.get(f"/posts/{r.json()['id']}/attachment")
+    assert att.status_code == 200
+    cd = att.headers["content-disposition"]
+    assert cd.startswith('inline; filename="Relatorio  versao final.pdf"')
+    assert "filename*=UTF-8''Relato%CC%81rio%20%E2%80%93" in cd

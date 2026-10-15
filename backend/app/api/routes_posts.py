@@ -5,7 +5,9 @@ máximo fixa (pinned) ou remove post/resposta de outra pessoa."""
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel
@@ -293,6 +295,16 @@ async def create_post(
     return _post_out(post, user, session, user)
 
 
+def _content_disposition(kind: str, filename: str) -> str:
+    """Cabeçalho com o nome do arquivo. Bug real de produção: o nome ia cru
+    e cabeçalho HTTP só aceita latin-1 — PDF com travessão, aspas curvas ou
+    acento "decomposto" (Mac/Word) dava 500 ao baixar. Vai uma versão ASCII
+    (navegadores antigos) e o nome real em `filename*` (RFC 5987)."""
+    ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode("ascii")
+    ascii_name = re.sub(r'["\\\x00-\x1f\x7f]', "", ascii_name).strip() or "anexo"
+    return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename, safe='')}"
+
+
 @router.get("/posts/{post_id}/attachment")
 def get_post_attachment(post_id: int, user: CurrentUser, session: SessionDep):
     """Anexo de aviso de grupo segue a mesma regra do mural do grupo
@@ -307,7 +319,7 @@ def get_post_attachment(post_id: int, user: CurrentUser, session: SessionDep):
     headers = {}
     if post.attachment_filename:
         # inline: imagem abre na aba, PDF idem — o nome fica pro "salvar como"
-        headers["Content-Disposition"] = f'inline; filename="{post.attachment_filename}"'
+        headers["Content-Disposition"] = _content_disposition("inline", post.attachment_filename)
     return Response(
         content=post.attachment,
         media_type=post.attachment_content_type or "application/octet-stream",
