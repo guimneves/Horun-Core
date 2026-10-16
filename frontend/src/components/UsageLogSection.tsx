@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { api, ApiError, USAGE_PURPOSES, type EquipmentLog } from '../api/client'
+import { api, ApiError, USAGE_PURPOSES, type EquipmentLog, type LogField, type LogFieldValue } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { LogFieldsManager } from './LogFieldsManager'
 
 const field = 'w-full rounded-lg px-2.5 py-1.5 text-xs outline-none'
 const fieldStyle = { border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }
@@ -31,10 +32,53 @@ interface Draft {
   purpose: string
   experimentCode: string
   description: string
+  /** colunas próprias do equipamento, pela id da coluna */
+  extra: Record<string, LogFieldValue>
 }
 
 function emptyDraft(): Draft {
-  return { date: toLocalInputDate(new Date()), start: new Date().toTimeString().slice(0, 5), end: '', purpose: 'AN', experimentCode: '', description: '' }
+  return { date: toLocalInputDate(new Date()), start: new Date().toTimeString().slice(0, 5), end: '', purpose: 'AN', experimentCode: '', description: '', extra: {} }
+}
+
+/** valor de uma coluna própria para mostrar na tabela */
+function showValue(f: LogField, v: LogFieldValue | undefined): string {
+  if (v === undefined || v === null || v === '') return '—'
+  if (f.kind === 'checkbox') return v ? 'sim' : 'não'
+  if (f.kind === 'date' && typeof v === 'string') return new Date(`${v}T00:00:00`).toLocaleDateString('pt-BR')
+  if (f.kind === 'number') return `${String(v).replace('.', ',')}${f.unit ? ` ${f.unit}` : ''}`
+  return String(v)
+}
+
+function ExtraInput({ f, value, onChange }: { f: LogField; value: LogFieldValue | undefined; onChange: (v: LogFieldValue) => void }) {
+  const str = value === undefined || value === null ? '' : String(value)
+  switch (f.kind) {
+    case 'checkbox':
+      return (
+        <label className="flex min-h-9 items-center gap-2 text-xs">
+          <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
+          sim
+        </label>
+      )
+    case 'select':
+      return (
+        <select value={str} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle}>
+          <option value="">—</option>
+          {f.options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      )
+    case 'longtext':
+      return <textarea value={str} onChange={(e) => onChange(e.target.value)} rows={2} className={field} style={fieldStyle} />
+    case 'number':
+      return <input inputMode="decimal" value={str.replace('.', ',')} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle} />
+    case 'date':
+      return <input type="date" value={str} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle} />
+    case 'time':
+      return <input type="time" value={str} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle} />
+    default:
+      return <input value={str} onChange={(e) => onChange(e.target.value)} className={field} style={fieldStyle} />
+  }
 }
 
 function EntryForm({
@@ -43,12 +87,14 @@ function EntryForm({
   onSave,
   onCancel,
   busy,
+  fields,
 }: {
   draft: Draft
   onChange: (d: Draft) => void
   onSave: () => void
   onCancel?: () => void
   busy: boolean
+  fields: LogField[]
 }) {
   return (
     <div className="mb-3 rounded-lg p-3" style={{ background: 'var(--color-surface)' }}>
@@ -78,6 +124,21 @@ function EntryForm({
         <label className={labelCls} style={labelStyle}>Código do experimento (opcional)</label>
         <input value={draft.experimentCode} onChange={(e) => onChange({ ...draft, experimentCode: e.target.value })} placeholder="ex.: EXP-042" className={field} style={fieldStyle} />
       </div>
+      {fields.length > 0 && (
+        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2 [&>div]:min-w-0">
+          {fields.map((f) => (
+            <div key={f.id} className={f.kind === 'longtext' ? 'sm:col-span-2' : undefined}>
+              <label className={labelCls} style={labelStyle}>
+                {f.label}
+                {f.unit && ` (${f.unit})`}
+                {f.required ? ' *' : ' (opcional)'}
+              </label>
+              <ExtraInput f={f} value={draft.extra[String(f.id)]} onChange={(v) => onChange({ ...draft, extra: { ...draft.extra, [String(f.id)]: v } })} />
+              {f.help && <p className="mt-0.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{f.help}</p>}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mb-3">
         <label className={labelCls} style={labelStyle}>Observação (opcional)</label>
         <textarea value={draft.description} onChange={(e) => onChange({ ...draft, description: e.target.value })} rows={2} className={field} style={fieldStyle} />
@@ -115,6 +176,18 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // colunas próprias do equipamento (todas — as arquivadas só para o gerenciador)
+  const [allFields, setAllFields] = useState<LogField[]>([])
+  const fields = allFields.filter((f) => f.active)
+  const canManageFields = !!user?.can.manage_log_fields
+
+  function reloadFields() {
+    api
+      .listLogFields(equipmentId, canManageFields)
+      .then(setAllFields)
+      .catch(() => setAllFields([]))
+  }
+  useEffect(reloadFields, [equipmentId, canManageFields])
 
   function reload() {
     api
@@ -134,6 +207,13 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       description: d.description.trim(),
       occurred_at: `${d.date}T${d.start || '00:00'}:00`,
       ended_at: d.end ? `${d.date}T${d.end}:00` : null,
+      // vazio vai como null (apaga); o backend confere tipo e obrigatórias
+      extra: Object.fromEntries(
+        fields.map((f) => {
+          const v = d.extra[String(f.id)]
+          return [String(f.id), v === undefined || v === '' ? null : v]
+        }),
+      ),
     }
   }
 
@@ -161,6 +241,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       purpose: log.purpose,
       experimentCode: log.experiment_code,
       description: log.description,
+      extra: { ...(log.extra ?? {}) },
     })
   }
 
@@ -215,7 +296,9 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
         Mesmo formato da ficha de papel do laboratório — ainda não sincronizada com o histórico interno do módulo.
       </p>
 
-      {adding && <EntryForm draft={draft} onChange={setDraft} onSave={handleAdd} onCancel={() => setAdding(false)} busy={busy} />}
+      {canManageFields && <LogFieldsManager equipmentId={equipmentId} fields={allFields} onChanged={reloadFields} />}
+
+      {adding && <EntryForm draft={draft} onChange={setDraft} onSave={handleAdd} onCancel={() => setAdding(false)} busy={busy} fields={fields} />}
       {error && <p className="mb-2 text-xs" style={{ color: '#d43b3b' }}>{error}</p>}
 
       {loadError ? (
@@ -229,7 +312,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
           {logs.map((log) => {
             const canEdit = log.user_id === user?.id || !!user?.can.moderate
             if (editingId === log.id) {
-              return <EntryForm key={log.id} draft={editDraft} onChange={setEditDraft} onSave={handleSaveEdit} onCancel={() => setEditingId(null)} busy={busy} />
+              return <EntryForm key={log.id} draft={editDraft} onChange={setEditDraft} onSave={handleSaveEdit} onCancel={() => setEditingId(null)} busy={busy} fields={fields} />
             }
             return (
               <div key={log.id} className="rounded-lg border px-3 py-2.5 text-[13px]" style={{ borderColor: 'var(--color-border)' }}>
@@ -243,6 +326,17 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
                   {log.user_display_name}
                   {log.experiment_code ? ` · ${log.experiment_code}` : ''}
                 </div>
+                {fields.some((f) => log.extra?.[String(f.id)] !== undefined) && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                    {fields
+                      .filter((f) => log.extra?.[String(f.id)] !== undefined)
+                      .map((f) => (
+                        <span key={f.id}>
+                          <span style={{ color: 'var(--color-text-muted)' }}>{f.label}:</span> {showValue(f, log.extra[String(f.id)])}
+                        </span>
+                      ))}
+                  </div>
+                )}
                 {log.description && <p className="mt-1 break-words text-[13px]">{log.description}</p>}
                 <div className="mt-1 flex flex-wrap items-center gap-x-4 text-xs">
                   {log.verified_by_name ? (
@@ -268,7 +362,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
           })}
         </div>
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-left text-xs" style={{ minWidth: 640 }}>
+          <table className="w-full text-left text-xs" style={{ minWidth: 640 + fields.length * 100 }}>
             <thead>
               <tr style={{ color: 'var(--color-text-muted)' }}>
                 <th className="py-1 pr-3 font-medium">Data</th>
@@ -277,6 +371,12 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
                 <th className="py-1 pr-3 font-medium">Fim</th>
                 <th className="py-1 pr-3 font-medium">Código</th>
                 <th className="py-1 pr-3 font-medium">Usuário</th>
+                {fields.map((f) => (
+                  <th key={f.id} className="py-1 pr-3 font-medium" title={f.help || undefined}>
+                    {f.label}
+                    {f.unit && <span className="font-normal"> ({f.unit})</span>}
+                  </th>
+                ))}
                 <th className="py-1 pr-3 font-medium">Observação</th>
                 <th className="py-1 pr-3 font-medium">Conferência</th>
                 <th className="py-1 font-medium">Ações</th>
@@ -288,8 +388,8 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
                 if (editingId === log.id) {
                   return (
                     <tr key={log.id}>
-                      <td colSpan={9} className="py-2">
-                        <EntryForm draft={editDraft} onChange={setEditDraft} onSave={handleSaveEdit} onCancel={() => setEditingId(null)} busy={busy} />
+                      <td colSpan={9 + fields.length} className="py-2">
+                        <EntryForm draft={editDraft} onChange={setEditDraft} onSave={handleSaveEdit} onCancel={() => setEditingId(null)} busy={busy} fields={fields} />
                       </td>
                     </tr>
                   )
@@ -302,6 +402,11 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
                     <td className="py-1.5 pr-3 whitespace-nowrap">{log.ended_at ? timeOf(log.ended_at) : '—'}</td>
                     <td className="py-1.5 pr-3">{log.experiment_code || '—'}</td>
                     <td className="py-1.5 pr-3 whitespace-nowrap">{log.user_display_name}</td>
+                    {fields.map((f) => (
+                      <td key={f.id} className="py-1.5 pr-3">
+                        {showValue({ ...f, unit: '' }, log.extra?.[String(f.id)])}
+                      </td>
+                    ))}
                     <td className="py-1.5 pr-3">{log.description || '—'}</td>
                     <td className="py-1.5 pr-3 whitespace-nowrap">
                       {log.verified_by_name ? (

@@ -6,8 +6,10 @@ app/db/models.py."""
 
 from __future__ import annotations
 
+import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -15,14 +17,16 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.api.deps import CurrentUser, EquipmentManagerUser, ModeratorUser, SessionDep
+from app.api.deps import CurrentUser, EquipmentManagerUser, LogFieldManagerUser, ModeratorUser, SessionDep
 from app.core.permissions import can_moderate
 from app.db.models import (
     EQUIPMENT_VOLTAGES,
+    LOG_FIELD_KINDS,
     USAGE_PURPOSES,
     Equipment,
     EquipmentArea,
     EquipmentLog,
+    EquipmentLogField,
     EquipmentType,
     Module,
     Reservation,
@@ -453,6 +457,9 @@ def delete_equipment(equipment_id: str, _admin: EquipmentManagerUser, session: S
             "mesmo necessário excluir o equipamento.",
         )
 
+    # sem registros, as colunas próprias da ficha não guardam nada
+    for field in session.exec(select(EquipmentLogField).where(EquipmentLogField.equipment_id == equipment_id)).all():
+        session.delete(field)
     session.delete(equipment)
     session.commit()
     return {"ok": True}
@@ -510,12 +517,250 @@ def _check_purpose(purpose: str) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Objetivo do uso inválido — use um de: {', '.join(USAGE_PURPOSES)}")
 
 
+# --- Colunas próprias da ficha RUE de cada equipamento (pedido do
+# usuário, 16/10/2026) -------------------------------------------------
+
+_MAX_FIELDS = 30
+_MAX_TEXT = 2000
+
+
+class LogFieldIn(BaseModel):
+    label: str
+    kind: str = "text"
+    options: list[str] = []
+    unit: str = ""
+    help: str = ""
+    required: bool = False
+
+
+class LogFieldPatch(BaseModel):
+    label: str | None = None
+    kind: str | None = None
+    options: list[str] | None = None
+    unit: str | None = None
+    help: str | None = None
+    required: bool | None = None
+    active: bool | None = None  # True = devolver uma coluna arquivada
+
+
+class LogFieldOut(BaseModel):
+    id: int
+    equipment_id: str
+    label: str
+    kind: str
+    options: list[str]
+    unit: str
+    help: str
+    required: bool
+    position: int
+    active: bool
+
+
+def _field_out(f: EquipmentLogField) -> LogFieldOut:
+    return LogFieldOut(
+        id=f.id, equipment_id=f.equipment_id, label=f.label, kind=f.kind, options=json.loads(f.options or "[]"),
+        unit=f.unit or "", help=f.help or "", required=bool(f.required), position=f.position or 0, active=bool(f.active),
+    )
+
+
+def _clean_options(kind: str, options: list[str]) -> list[str]:
+    opts = []
+    for o in options:
+        o = o.strip()
+        if o and o not in opts:
+            opts.append(o)
+    if kind == "select" and not opts:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Uma coluna de lista precisa de pelo menos uma opção")
+    return opts if kind == "select" else []
+
+
+def _check_kind(kind: str) -> None:
+    if kind not in LOG_FIELD_KINDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Tipo de coluna inválido — use um de: {', '.join(LOG_FIELD_KINDS)}")
+
+
+def _get_equipment(session: Session, equipment_id: str) -> Equipment:
+    equipment = session.get(Equipment, equipment_id)
+    if equipment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Equipamento não encontrado")
+    return equipment
+
+
+def _fields_of(session: Session, equipment_id: str, *, active_only: bool = True) -> list[EquipmentLogField]:
+    query = select(EquipmentLogField).where(EquipmentLogField.equipment_id == equipment_id)
+    if active_only:
+        query = query.where(EquipmentLogField.active == True)  # noqa: E712
+    return list(session.exec(query.order_by(EquipmentLogField.position, EquipmentLogField.id)).all())
+
+
+@router.get("/equipment/{equipment_id}/log-fields", response_model=list[LogFieldOut])
+def list_log_fields(equipment_id: str, _user: CurrentUser, session: SessionDep, include_archived: bool = False):
+    _get_equipment(session, equipment_id)
+    return [_field_out(f) for f in _fields_of(session, equipment_id, active_only=not include_archived)]
+
+
+@router.post("/equipment/{equipment_id}/log-fields", response_model=LogFieldOut)
+def create_log_field(equipment_id: str, payload: LogFieldIn, user: LogFieldManagerUser, session: SessionDep):
+    _get_equipment(session, equipment_id)
+    label = payload.label.strip()
+    if not label:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Dê um nome à coluna")
+    _check_kind(payload.kind)
+    existing = _fields_of(session, equipment_id, active_only=False)
+    if len([f for f in existing if f.active]) >= _MAX_FIELDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"No máximo {_MAX_FIELDS} colunas por equipamento")
+    if any(f.active and f.label.casefold() == label.casefold() for f in existing):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Já existe a coluna \"{label}\" neste equipamento")
+    field = EquipmentLogField(
+        equipment_id=equipment_id, label=label, kind=payload.kind,
+        options=json.dumps(_clean_options(payload.kind, payload.options), ensure_ascii=False),
+        unit=payload.unit.strip(), help=payload.help.strip(), required=payload.required,
+        position=max((f.position for f in existing), default=-1) + 1, created_by_id=user.id,
+    )
+    session.add(field)
+    session.commit()
+    session.refresh(field)
+    return _field_out(field)
+
+
+def _get_field(session: Session, equipment_id: str, field_id: int) -> EquipmentLogField:
+    field = session.get(EquipmentLogField, field_id)
+    if field is None or field.equipment_id != equipment_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coluna não encontrada")
+    return field
+
+
+@router.patch("/equipment/{equipment_id}/log-fields/{field_id}", response_model=LogFieldOut)
+def update_log_field(equipment_id: str, field_id: int, payload: LogFieldPatch, _user: LogFieldManagerUser, session: SessionDep):
+    field = _get_field(session, equipment_id, field_id)
+    if payload.label is not None:
+        label = payload.label.strip()
+        if not label:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Dê um nome à coluna")
+        clash = any(
+            f.id != field.id and f.active and f.label.casefold() == label.casefold()
+            for f in _fields_of(session, equipment_id)
+        )
+        if clash:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Já existe a coluna \"{label}\" neste equipamento")
+        field.label = label
+    if payload.kind is not None:
+        _check_kind(payload.kind)
+        field.kind = payload.kind
+    if payload.options is not None or payload.kind is not None:
+        opts = payload.options if payload.options is not None else json.loads(field.options or "[]")
+        field.options = json.dumps(_clean_options(field.kind, opts), ensure_ascii=False)
+    if payload.unit is not None:
+        field.unit = payload.unit.strip()
+    if payload.help is not None:
+        field.help = payload.help.strip()
+    if payload.required is not None:
+        field.required = payload.required
+    if payload.active is not None:
+        field.active = payload.active
+    session.add(field)
+    session.commit()
+    session.refresh(field)
+    return _field_out(field)
+
+
+class LogFieldOrderIn(BaseModel):
+    ids: list[int]
+
+
+@router.put("/equipment/{equipment_id}/log-fields/order", response_model=list[LogFieldOut])
+def reorder_log_fields(equipment_id: str, payload: LogFieldOrderIn, _user: LogFieldManagerUser, session: SessionDep):
+    _get_equipment(session, equipment_id)
+    fields = {f.id: f for f in _fields_of(session, equipment_id, active_only=False)}
+    if set(payload.ids) - set(fields):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Coluna de outro equipamento na ordem")
+    for pos, fid in enumerate(payload.ids):
+        fields[fid].position = pos
+        session.add(fields[fid])
+    session.commit()
+    return [_field_out(f) for f in _fields_of(session, equipment_id)]
+
+
+@router.delete("/equipment/{equipment_id}/log-fields/{field_id}")
+def archive_log_field(equipment_id: str, field_id: int, _user: LogFieldManagerUser, session: SessionDep):
+    """Arquiva: some do formulário e da tabela, mas o que já foi preenchido
+    nos registros continua guardado (e volta se a coluna for reativada)."""
+    field = _get_field(session, equipment_id, field_id)
+    field.active = False
+    session.add(field)
+    session.commit()
+    return {"ok": True}
+
+
+def _coerce(field: EquipmentLogField, value: Any) -> Any:
+    """Valor de uma coluna própria, conferido pelo tipo. None/"" = vazio."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    name = field.label
+    kind = field.kind
+    if kind == "checkbox":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in ("sim", "true", "1", "s"):
+            return True
+        if isinstance(value, str) and value.strip().lower() in ("não", "nao", "false", "0", "n"):
+            return False
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: marque sim ou não")
+    if kind == "number":
+        try:
+            num = float(str(value).strip().replace(",", ".")) if not isinstance(value, (int, float)) else float(value)
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: precisa ser um número") from None
+        return int(num) if num.is_integer() else num
+    text = str(value).strip()
+    if kind == "select":
+        opts = json.loads(field.options or "[]")
+        if text not in opts:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: escolha uma das opções ({', '.join(opts)})")
+        return text
+    if kind == "date":
+        try:
+            return date.fromisoformat(text).isoformat()
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: data inválida (AAAA-MM-DD)") from None
+    if kind == "time":
+        try:
+            return time.fromisoformat(text).strftime("%H:%M")
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: hora inválida (HH:MM)") from None
+    if len(text) > _MAX_TEXT:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name}: texto longo demais (máx. {_MAX_TEXT} caracteres)")
+    return text
+
+
+def _merge_extra(session: Session, equipment_id: str, current: dict, incoming: dict[str, Any] | None) -> dict:
+    """Junta os valores novos das colunas ATIVAS ao que já estava guardado
+    (colunas arquivadas não se perdem) e confere as obrigatórias."""
+    fields = _fields_of(session, equipment_id)
+    out = dict(current)
+    incoming = incoming or {}
+    for f in fields:
+        key = str(f.id)
+        if key in incoming:
+            v = _coerce(f, incoming[key])
+            if v is None:
+                out.pop(key, None)
+            else:
+                out[key] = v
+    missing = [f.label for f in fields if f.required and f.kind != "checkbox" and out.get(str(f.id)) in (None, "")]
+    if missing:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Preencha: {', '.join(missing)}")
+    return out
+
+
 class EquipmentLogIn(BaseModel):
     purpose: str = "AN"
     experiment_code: str = ""
     description: str = ""
     occurred_at: datetime | None = None  # None = agora
     ended_at: datetime | None = None
+    # colunas próprias do equipamento: {"<id do campo>": valor}
+    extra: dict[str, Any] = {}
 
 
 class EquipmentLogPatch(BaseModel):
@@ -525,6 +770,7 @@ class EquipmentLogPatch(BaseModel):
     occurred_at: datetime | None = None
     ended_at: datetime | None = None
     clear_ended_at: bool = False
+    extra: dict[str, Any] | None = None
 
 
 class EquipmentLogOut(BaseModel):
@@ -541,6 +787,7 @@ class EquipmentLogOut(BaseModel):
     verified_by_id: int | None
     verified_by_name: str | None
     verified_at: datetime | None
+    extra: dict[str, Any] = {}
 
 
 def _log_out(log: EquipmentLog, user: User, session: Session) -> EquipmentLogOut:
@@ -562,6 +809,7 @@ def _log_out(log: EquipmentLog, user: User, session: Session) -> EquipmentLogOut
         verified_by_id=log.verified_by_id,
         verified_by_name=verifier_name,
         verified_at=log.verified_at,
+        extra=json.loads(log.extra or "{}"),
     )
 
 
@@ -595,6 +843,7 @@ def create_equipment_log(equipment_id: str, payload: EquipmentLogIn, user: Curre
         # start_at/end_at de Reservation — não datetime.utcnow() (aware).
         occurred_at=payload.occurred_at or datetime.now(),
         ended_at=payload.ended_at,
+        extra=json.dumps(_merge_extra(session, equipment_id, {}, payload.extra), ensure_ascii=False),
     )
     session.add(log)
     session.commit()
@@ -623,6 +872,10 @@ def update_equipment_log(equipment_id: str, log_id: int, payload: EquipmentLogPa
         log.ended_at = None
     elif payload.ended_at is not None:
         log.ended_at = payload.ended_at
+    if payload.extra is not None:
+        log.extra = json.dumps(
+            _merge_extra(session, equipment_id, json.loads(log.extra or "{}"), payload.extra), ensure_ascii=False
+        )
 
     session.add(log)
     session.commit()

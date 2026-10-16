@@ -128,6 +128,8 @@ def _run_migrations() -> None:
     _ensure_column("equipmentlog", "ended_at", "TIMESTAMP")
     _ensure_column("equipmentlog", "verified_by_id", "INTEGER")
     _ensure_column("equipmentlog", "verified_at", "TIMESTAMP")
+    # colunas próprias de cada equipamento (EquipmentLogField)
+    _ensure_column("equipmentlog", "extra", "VARCHAR DEFAULT '{}'")
     _backfill_null_text("equipmentlog", ("purpose", "experiment_code"))
 
     # --- notificações pedidas por módulos (routes_module_notify.py) ---

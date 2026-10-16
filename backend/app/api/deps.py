@@ -5,7 +5,13 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, status
 from sqlmodel import Session
 
-from app.core.permissions import can_manage_equipment, can_manage_modules, can_moderate, is_coordinator_or_above
+from app.core.permissions import (
+    can_manage_equipment,
+    can_manage_log_fields,
+    can_manage_modules,
+    can_moderate,
+    is_coordinator_or_above,
+)
 from app.core.security import SESSION_COOKIE_NAME, read_session_token
 from app.db.models import User
 from app.db.session import get_session
@@ -75,6 +81,19 @@ def require_moderator(user: CurrentUser) -> User:
 
 
 ModeratorUser = Annotated[User, Depends(require_moderator)]
+
+
+def require_log_field_manager(user: CurrentUser) -> User:
+    """Colunas próprias da ficha RUE — técnicos, pesquisadores doutores,
+    coordenadores e o administrador máximo."""
+    if not can_manage_log_fields(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Ação restrita a técnicos, pesquisadores doutores e coordenadores"
+        )
+    return user
+
+
+LogFieldManagerUser = Annotated[User, Depends(require_log_field_manager)]
 
 
 def require_protected(user: CurrentUser) -> User:

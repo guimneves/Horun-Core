@@ -88,6 +88,21 @@ def can_moderate(user: User) -> bool:
     return user_level(user) <= LEVEL_TECHNICIAN
 
 
+# Titulação que conta como "pesquisador doutor" (professor já é doutor).
+DOCTORAL_QUALIFICATIONS = ("Doutor(a)", "Professor(a)")
+
+
+def can_manage_log_fields(user: User) -> bool:
+    """Criar/editar as colunas próprias da ficha RUE de cada equipamento
+    (pedido do usuário, 16/10/2026): técnicos e pesquisadores DOUTORES —
+    além de coordenadores e do administrador máximo. Pesquisador sem
+    doutorado e IC não."""
+    level = user_level(user)
+    if level in (LEVEL_ADMIN, LEVEL_COORDINATOR, LEVEL_TECHNICIAN):
+        return True
+    return level == LEVEL_RESEARCHER and (user.qualification or "") in DOCTORAL_QUALIFICATIONS
+
+
 def capabilities(user: User) -> dict[str, bool]:
     """Mapa pronto para o frontend esconder/mostrar ações (o backend continua
     sendo quem decide — isto é só para a interface não oferecer o que vai
@@ -100,6 +115,7 @@ def capabilities(user: User) -> dict[str, bool]:
         "manage_modules": can_manage_modules(user),
         "manage_equipment": can_manage_equipment(user),
         "moderate": can_moderate(user),
+        "manage_log_fields": can_manage_log_fields(user),
         "read_suggestions": user.is_protected,
         # Ligar/desligar o cadastro automático (Administração → Acesso).
         "manage_signup": user.is_protected,

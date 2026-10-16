@@ -370,6 +370,36 @@ class EquipmentLog(SQLModel, table=True):
     # Só o administrador máximo confere (não precisa ser quem registrou).
     verified_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
     verified_at: Optional[NaiveDatetime] = None
+    # Colunas próprias do equipamento (EquipmentLogField) — JSON
+    # {"<id do campo>": valor}. Pela id, não pelo rótulo: renomear a coluna
+    # não perde o que já foi preenchido.
+    extra: str = "{}"
+
+
+# Tipos de preenchimento das colunas próprias de cada ficha RUE.
+LOG_FIELD_KINDS = ["text", "longtext", "number", "select", "date", "time", "checkbox"]
+
+
+class EquipmentLogField(SQLModel, table=True):
+    """Coluna a mais na ficha RUE de UM equipamento (pedido do usuário,
+    16/10/2026): cada equipamento tem as suas especificidades de
+    preenchimento (ex.: RE7S — método, nº do carrossel; LECO — nº de
+    brancos). Criada por técnicos, coordenadores e pesquisadores doutores
+    (ver permissions.can_manage_log_fields). Remover arquiva (`active`
+    False): os valores antigos continuam guardados nos registros."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    equipment_id: str = Field(foreign_key="equipment.id", index=True)
+    label: str
+    kind: str = "text"  # ver LOG_FIELD_KINDS
+    options: str = "[]"  # JSON — opções do "select"
+    unit: str = ""  # ex.: "mg", "°C" (para number)
+    help: str = ""  # instrução de preenchimento, aparece no formulário
+    required: bool = False
+    position: int = 0
+    active: bool = True
+    created_by_id: Optional[int] = Field(default=None, foreign_key="user.id")
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class Reservation(SQLModel, table=True):

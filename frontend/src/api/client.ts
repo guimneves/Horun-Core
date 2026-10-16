@@ -44,6 +44,8 @@ export interface Capabilities {
   manage_modules: boolean
   manage_equipment: boolean
   moderate: boolean
+  /** colunas próprias da ficha RUE (técnicos, pesquisadores doutores, coordenação) */
+  manage_log_fields: boolean
   read_suggestions: boolean
   /** Ligar/desligar o cadastro automático (só o administrador máximo). */
   manage_signup: boolean
@@ -271,6 +273,44 @@ export interface EquipmentLog {
   verified_by_id: number | null
   verified_by_name: string | null
   verified_at: string | null
+  /** colunas próprias do equipamento: {"<id da coluna>": valor} */
+  extra: Record<string, LogFieldValue>
+}
+
+export type LogFieldValue = string | number | boolean
+export type LogFieldKind = 'text' | 'longtext' | 'number' | 'select' | 'date' | 'time' | 'checkbox'
+
+export const LOG_FIELD_KINDS: { kind: LogFieldKind; label: string }[] = [
+  { kind: 'text', label: 'Texto curto' },
+  { kind: 'longtext', label: 'Texto longo' },
+  { kind: 'number', label: 'Número' },
+  { kind: 'select', label: 'Lista de opções' },
+  { kind: 'date', label: 'Data' },
+  { kind: 'time', label: 'Hora' },
+  { kind: 'checkbox', label: 'Sim / não' },
+]
+
+/** coluna a mais na ficha RUE de um equipamento */
+export interface LogField {
+  id: number
+  equipment_id: string
+  label: string
+  kind: LogFieldKind
+  options: string[]
+  unit: string
+  help: string
+  required: boolean
+  position: number
+  active: boolean
+}
+
+export interface LogFieldInput {
+  label: string
+  kind: LogFieldKind
+  options: string[]
+  unit: string
+  help: string
+  required: boolean
 }
 
 export interface Reservation {
@@ -570,7 +610,14 @@ export const api = {
   listEquipmentLogs: (equipmentId: string) => request<EquipmentLog[]>(`/equipment/${encodeURIComponent(equipmentId)}/logs`),
   createEquipmentLog: (
     equipmentId: string,
-    payload: { purpose: string; experiment_code?: string; description?: string; occurred_at?: string; ended_at?: string | null },
+    payload: {
+      purpose: string
+      experiment_code?: string
+      description?: string
+      occurred_at?: string
+      ended_at?: string | null
+      extra?: Record<string, LogFieldValue | null>
+    },
   ) => request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs`, { method: 'POST', body: JSON.stringify(payload) }),
   updateEquipmentLog: (
     equipmentId: string,
@@ -582,12 +629,24 @@ export const api = {
       occurred_at: string
       ended_at: string | null
       clear_ended_at: boolean
+      extra: Record<string, LogFieldValue | null>
     }>,
   ) => request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
   verifyEquipmentLog: (equipmentId: string, logId: number) =>
     request<EquipmentLog>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}/verify`, { method: 'POST' }),
   deleteEquipmentLog: (equipmentId: string, logId: number) =>
     request<{ ok: boolean }>(`/equipment/${encodeURIComponent(equipmentId)}/logs/${logId}`, { method: 'DELETE' }),
+
+  listLogFields: (equipmentId: string, includeArchived = false) =>
+    request<LogField[]>(`/equipment/${encodeURIComponent(equipmentId)}/log-fields${includeArchived ? '?include_archived=true' : ''}`),
+  createLogField: (equipmentId: string, payload: LogFieldInput) =>
+    request<LogField>(`/equipment/${encodeURIComponent(equipmentId)}/log-fields`, { method: 'POST', body: JSON.stringify(payload) }),
+  updateLogField: (equipmentId: string, fieldId: number, payload: Partial<LogFieldInput & { active: boolean }>) =>
+    request<LogField>(`/equipment/${encodeURIComponent(equipmentId)}/log-fields/${fieldId}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  reorderLogFields: (equipmentId: string, ids: number[]) =>
+    request<LogField[]>(`/equipment/${encodeURIComponent(equipmentId)}/log-fields/order`, { method: 'PUT', body: JSON.stringify({ ids }) }),
+  archiveLogField: (equipmentId: string, fieldId: number) =>
+    request<{ ok: boolean }>(`/equipment/${encodeURIComponent(equipmentId)}/log-fields/${fieldId}`, { method: 'DELETE' }),
 
   listReservations: (range?: { start: string; end: string }) =>
     request<Reservation[]>(`/reservations${range ? `?start=${range.start}&end=${range.end}` : ''}`),
