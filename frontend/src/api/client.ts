@@ -49,7 +49,27 @@ export interface Capabilities {
   read_suggestions: boolean
   /** Ligar/desligar o cadastro automático (só o administrador máximo). */
   manage_signup: boolean
+  /** Crachás de outras pessoas (o verso tem dados de saúde) — só o administrador máximo. */
+  make_badges: boolean
 }
+
+/** Dados do crachá (frente e verso). SENSÍVEL: só a própria pessoa e o administrador máximo. */
+export interface BadgeData {
+  id: number
+  name: string
+  full_name: string
+  title: string
+  email: string
+  phone: string
+  has_photo: boolean
+  emergency_contact_name: string
+  emergency_contact_phone: string
+  medical_notes: string
+  blood_type: string
+  badge_title: string
+}
+
+export const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
 /** Cadastro automático (tela de login → Primeiro acesso → Criar minha conta). */
 export interface SignupInfo {
@@ -398,7 +418,15 @@ export const api = {
     birth_day?: number | null
     birth_month?: number | null
     birth_year?: number | null
+    emergency_contact_name?: string
+    emergency_contact_phone?: string
+    medical_notes?: string
+    blood_type?: string
+    badge_title?: string
   }) => request<CurrentUser>('/auth/me', { method: 'PATCH', body: JSON.stringify(payload) }),
+  getMyBadge: () => request<BadgeData>('/auth/me/badge'),
+  getUserBadge: (userId: number) => request<BadgeData>(`/users/${userId}/badge`),
+  getAllBadges: () => request<BadgeData[]>('/users/badges'),
   uploadMyPhoto: async (file: File) => {
     const form = new FormData()
     form.append('file', file)

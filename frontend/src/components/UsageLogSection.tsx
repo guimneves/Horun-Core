@@ -241,7 +241,7 @@ export function UsageLogSection({ equipmentId }: { equipmentId: string }) {
       purpose: log.purpose,
       experimentCode: log.experiment_code,
       description: log.description,
-      extra: { ...(log.extra ?? {}) },
+      extra: { ...log.extra },
     })
   }
 

@@ -36,7 +36,11 @@ def _ensure_column(table: str, column: str, ddl_type: str) -> None:
         conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
 
 
-_USER_TEXT_COLUMNS = ("full_name", "email", "phone", "position", "qualification", "display_name")
+_USER_TEXT_COLUMNS = (
+    "full_name", "email", "phone", "position", "qualification", "display_name",
+    # crachá (2026-10-20)
+    "emergency_contact_name", "emergency_contact_phone", "medical_notes", "blood_type", "badge_title",
+)
 
 
 def _backfill_null_text(table: str, columns: tuple[str, ...]) -> None:
@@ -73,6 +77,9 @@ def _run_migrations() -> None:
     _ensure_column("user", "birth_month", "INTEGER")
     _ensure_column("user", "birth_year", "INTEGER")
     _ensure_column("user", "email_notifications", "BOOLEAN DEFAULT TRUE")
+    # crachá (2026-10-20): dados do verso, sensíveis
+    for col in ("emergency_contact_name", "emergency_contact_phone", "medical_notes", "blood_type", "badge_title"):
+        _ensure_column("user", col, "VARCHAR DEFAULT ''")
     _backfill_null_text("user", _USER_TEXT_COLUMNS)
     # DEFAULT TRUE: as contas que já existiam quando a coluna foi criada
     # não passam pelo onboarding (só as criadas depois, que nascem False

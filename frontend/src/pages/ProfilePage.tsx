@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { api, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/Avatar'
+import { BadgeSection } from '../components/BadgeSection'
 import { BirthDateFields, birthPayload, type BirthValue } from '../components/BirthDateFields'
 
 function Field({
@@ -242,6 +243,8 @@ export function ProfilePage() {
           {saving ? 'Salvando…' : 'Salvar perfil'}
         </button>
       </form>
+
+      <BadgeSection defaultTitle={user.qualification || user.position} />
 
       <form
         onSubmit={handleChangePassword}

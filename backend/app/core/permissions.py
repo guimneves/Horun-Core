@@ -119,4 +119,6 @@ def capabilities(user: User) -> dict[str, bool]:
         "read_suggestions": user.is_protected,
         # Ligar/desligar o cadastro automático (Administração → Acesso).
         "manage_signup": user.is_protected,
+        # Crachás de outras pessoas (o verso tem dados de saúde): só o nível 1.
+        "make_badges": user.is_protected,
     }

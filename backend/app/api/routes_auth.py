@@ -24,6 +24,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models import (
+    BLOOD_TYPES,
     POSITIONS,
     QUALIFICATIONS,
     Event,
@@ -187,6 +188,53 @@ class UpdateProfileRequest(BaseModel):
     birth_day: int | None = None
     birth_month: int | None = None
     birth_year: int | None = None
+    # verso do crachá (sensíveis — ver User)
+    emergency_contact_name: str | None = None
+    emergency_contact_phone: str | None = None
+    medical_notes: str | None = None
+    blood_type: str | None = None
+    badge_title: str | None = None
+
+    _validate_blood = field_validator("blood_type")(
+        lambda v: _validate_choice(v, BLOOD_TYPES, "Tipo sanguíneo") if v is not None else v
+    )
+
+
+# Texto que vai no crachá — limites para caber no cartão (60 × 92 mm)
+_BADGE_LIMITS = {
+    "emergency_contact_name": 60, "emergency_contact_phone": 30, "medical_notes": 160, "badge_title": 40,
+}
+
+
+class BadgeOut(BaseModel):
+    """Tudo o que o crachá precisa (frente e verso). SENSÍVEL: só a própria
+    pessoa e o administrador máximo."""
+
+    id: int
+    name: str  # nome curto (display_name), senão o completo
+    full_name: str
+    title: str  # badge_title, senão qualificação, senão posição
+    email: str
+    phone: str
+    has_photo: bool
+    emergency_contact_name: str
+    emergency_contact_phone: str
+    medical_notes: str
+    blood_type: str
+    badge_title: str
+
+
+def _badge(user: User) -> BadgeOut:
+    return BadgeOut(
+        id=user.id, name=(user.display_name or user.full_name or user.username).strip(),
+        full_name=user.full_name or "",
+        title=(user.badge_title or user.qualification or user.position or "").strip(),
+        email=user.email or "", phone=user.phone or "", has_photo=user.photo is not None,
+        emergency_contact_name=user.emergency_contact_name or "",
+        emergency_contact_phone=user.emergency_contact_phone or "",
+        medical_notes=user.medical_notes or "", blood_type=user.blood_type or "",
+        badge_title=user.badge_title or "",
+    )
 
 
 def _out(user: User) -> UserOut:
@@ -333,10 +381,25 @@ def update_profile(payload: UpdateProfileRequest, user: CurrentUser, session: Se
         user.birth_year = payload.birth_year
     elif payload.birth_set is False:
         user.birth_day = user.birth_month = user.birth_year = None
+    for field, limit in _BADGE_LIMITS.items():
+        value = getattr(payload, field)
+        if value is not None:
+            value = value.strip()
+            if len(value) > limit:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Texto longo demais para o crachá (máx. {limit} caracteres).")
+            setattr(user, field, value)
+    if payload.blood_type is not None:
+        user.blood_type = payload.blood_type
     session.add(user)
     session.commit()
     session.refresh(user)
     return _out(user)
+
+
+@router.get("/auth/me/badge", response_model=BadgeOut)
+def my_badge(user: CurrentUser):
+    """Os dados do meu crachá (inclui os do verso — só eu vejo)."""
+    return _badge(user)
 
 
 @router.post("/auth/change-password", response_model=UserOut)
@@ -385,6 +448,26 @@ def delete_my_photo(user: CurrentUser, session: SessionDep):
     session.commit()
     session.refresh(user)
     return _out(user)
+
+
+@router.get("/users/badges", response_model=list[BadgeOut])
+def all_badges(user: CurrentUser, session: SessionDep):
+    """Crachás de todos (impressão em lote) — só o administrador máximo, porque
+    o verso tem contato de emergência e dados de saúde."""
+    if not user.is_protected:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só o administrador máximo gera crachás de outras pessoas")
+    people = [u for u in session.exec(select(User)).all() if not u.is_protected]
+    return [_badge(u) for u in sorted(people, key=lambda u: (u.full_name or u.display_name or u.username).lower())]
+
+
+@router.get("/users/{user_id}/badge", response_model=BadgeOut)
+def user_badge(user_id: int, user: CurrentUser, session: SessionDep):
+    if user.id != user_id and not user.is_protected:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só a própria pessoa e o administrador máximo veem o crachá")
+    target = session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado")
+    return _badge(target)
 
 
 @router.get("/users/{user_id}/photo")

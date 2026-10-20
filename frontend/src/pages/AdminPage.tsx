@@ -248,6 +248,24 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
     }
   }
 
+  // Crachás (só o administrador máximo — o verso tem dados de saúde)
+  const { user: me } = useAuth()
+  const canBadges = !!me?.can.make_badges
+  const [badgeBusy, setBadgeBusy] = useState(false)
+  async function handleBadges(u?: CurrentUser) {
+    setError(null)
+    setBadgeBusy(true)
+    try {
+      const { downloadBadges } = await import('../lib/badge')
+      if (u) await downloadBadges([await api.getUserBadge(u.id)], `cracha-${u.username}.pdf`)
+      else await downloadBadges(await api.getAllBadges(), 'crachas-nqtr.pdf')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível gerar o crachá.')
+    } finally {
+      setBadgeBusy(false)
+    }
+  }
+
   async function handleRename(u: CurrentUser) {
     const raw = window.prompt(
       `Novo nome de usuário para "${u.display_name || u.username}" (sem espaço, sem acento):`,
@@ -268,6 +286,20 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
   return (
     <div className="flex flex-col gap-5 md:flex-row">
       <div className="min-w-0 flex-1">
+        {canBadges && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[12.5px]" style={{ borderColor: 'var(--color-border)' }}>
+            <span style={{ color: 'var(--color-text-muted)' }}>Crachás no modelo do NQTR (frente e verso, 60 × 92 mm), com os dados do perfil de cada pessoa.</span>
+            <button
+              type="button"
+              disabled={badgeBusy}
+              className="min-h-10 md:min-h-0 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-60"
+              style={{ background: 'var(--color-primary)', color: 'var(--color-primary-contrast)' }}
+              onClick={() => handleBadges()}
+            >
+              {badgeBusy ? 'Gerando…' : 'Crachás de todos (PDF)'}
+            </button>
+          </div>
+        )}
         {(justCreated || regenerated) && (
           <div
             className="mb-4 rounded-xl border p-4 text-[13px]"
@@ -366,6 +398,11 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                   <button className="min-h-10 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
                     {u.setup_code ? 'ver código' : 'gerar novo acesso'}
                   </button>
+                  {canBadges && (
+                    <button className="min-h-10 text-xs" style={{ color: 'var(--color-text-muted)' }} disabled={badgeBusy} onClick={() => handleBadges(u)}>
+                      crachá
+                    </button>
+                  )}
                   <button
                     className="min-h-10 text-xs"
                     style={{ color: '#d43b3b' }}
@@ -469,6 +506,11 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                     {!u.is_protected && (
                       <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} onClick={() => handleRegenerate(u)}>
                         {u.setup_code ? 'ver código' : 'gerar novo acesso'}
+                      </button>
+                    )}
+                    {!u.is_protected && canBadges && (
+                      <button className="min-h-10 md:min-h-0 text-xs" style={{ color: 'var(--color-text-muted)' }} disabled={badgeBusy} onClick={() => handleBadges(u)}>
+                        crachá
                       </button>
                     )}
                     {!u.is_protected && (

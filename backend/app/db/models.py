@@ -59,6 +59,9 @@ QUALIFICATIONS = [
 ]
 
 
+BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+
+
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(index=True, unique=True)
@@ -85,6 +88,17 @@ class User(SQLModel, table=True):
     # semanal) também por e-mail. Precisa de `email` preenchido e do SMTP
     # configurado no servidor.
     email_notifications: bool = Field(default=True)
+    # Dados do verso do crachá (Prompt 8.3 itens 6–7, pedido do usuário em
+    # 2026-10-20). SENSÍVEIS: só a própria pessoa e o administrador máximo
+    # veem — nunca em UserOut, no diretório nem na lista de usuários; saem
+    # só por GET /auth/me/badge-info e GET /users/{id}/badge.
+    emergency_contact_name: str = ""
+    emergency_contact_phone: str = ""
+    medical_notes: str = ""  # "Alergias e condições médicas"
+    blood_type: str = ""  # um de BLOOD_TYPES, ou ""
+    # Como o título aparece no crachá (ex.: "Professora", "Doutoranda") —
+    # vazio = a qualificação (ou a posição) do cadastro.
+    badge_title: str = ""
     # Foto de perfil — guardada no próprio banco (bytes), não em disco:
     # time pequeno, evita depender de um volume/servidor de arquivos
     # separado. Nunca incluída nas respostas normais de usuário (ver
