@@ -10,7 +10,10 @@ WORKDIR /app
 COPY design-system ./design-system
 COPY frontend ./frontend
 WORKDIR /app/frontend
-RUN npm ci
+# --include=dev: tsc e vite são devDependencies e o build precisa deles mesmo
+# que o ambiente peça só produção (NODE_ENV/omit=dev) — "tsc: not found" no
+# servidor, out/2026. A 2ª linha falha cedo, com mensagem clara, se faltar.
+RUN npm ci --include=dev --no-audit --no-fund  && test -x node_modules/.bin/tsc && test -x node_modules/.bin/vite
 # Same-origin: Caddy serve o front e faz proxy de /api pro backend no
 # mesmo domínio/porta — ver deploy/Caddyfile.
 ARG VITE_API_BASE_URL=/api
