@@ -5,6 +5,8 @@ import { equipmentUrl } from '../components/EquipmentQrCode'
 // Folha A4 de QR codes dos equipamentos para recortar e colar nas bancadas:
 // 6 por página (2 colunas × 3 linhas), cada etiqueta com o ícone do Horun, o
 // QR (abre a página do equipamento) e o nome embaixo. Gerado no navegador.
+// Etiquetas com cantos arredondados e um espaço entre elas (pedido do
+// mantenedor, out/2026: antes ficavam coladas umas nas outras).
 
 export interface QrLabel {
   id: string
@@ -17,6 +19,9 @@ const PAGE_H = 297
 const MARGIN = 10
 const COLS = 2
 const ROWS = 3
+const GAP = 6 // espaço entre as etiquetas (mm)
+const RADIUS = 4 // raio dos cantos da etiqueta (mm)
+const QR_SIZE = 44
 
 /** Ícone reduzido (o PNG original é grande) e em PNG leve para o PDF. */
 async function iconDataUrl(src: string, maxPx = 160): Promise<{ data: string; ratio: number }> {
@@ -41,22 +46,22 @@ export async function downloadQrSheet(labels: QrLabel[], filename = 'horun-qr-co
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
   const icon = await iconDataUrl(horunIcon).catch(() => null)
 
-  const cellW = (PAGE_W - 2 * MARGIN) / COLS
-  const cellH = (PAGE_H - 2 * MARGIN) / ROWS
+  const cellW = (PAGE_W - 2 * MARGIN - (COLS - 1) * GAP) / COLS
+  const cellH = (PAGE_H - 2 * MARGIN - (ROWS - 1) * GAP) / ROWS
   const perPage = COLS * ROWS
 
   for (let i = 0; i < labels.length; i++) {
     const label = labels[i]
     if (i > 0 && i % perPage === 0) doc.addPage()
     const slot = i % perPage
-    const x = MARGIN + (slot % COLS) * cellW
-    const y = MARGIN + Math.floor(slot / COLS) * cellH
+    const x = MARGIN + (slot % COLS) * (cellW + GAP)
+    const y = MARGIN + Math.floor(slot / COLS) * (cellH + GAP)
 
-    // linha de corte tracejada
-    doc.setDrawColor(190)
-    doc.setLineWidth(0.2)
-    doc.setLineDashPattern([2, 2], 0)
-    doc.rect(x, y, cellW, cellH)
+    // contorno da etiqueta (linha de corte), com cantos arredondados
+    doc.setDrawColor(170)
+    doc.setLineWidth(0.3)
+    doc.setLineDashPattern([2, 1.5], 0)
+    doc.roundedRect(x, y, cellW, cellH, RADIUS, RADIUS, 'S')
     doc.setLineDashPattern([], 0)
 
     // cabeçalho: ícone + "Horun"
@@ -75,10 +80,10 @@ export async function downloadQrSheet(labels: QrLabel[], filename = 'horun-qr-co
     doc.text('Escaneie para ver e reservar', x + cellW - 6, headY + 5.6, { align: 'right' })
 
     // QR
-    const qrSize = 50
+    const qrSize = QR_SIZE
     const qr = await QRCode.toDataURL(equipmentUrl(label.id), { margin: 0, width: 400, errorCorrectionLevel: 'M' })
     const qrX = x + (cellW - qrSize) / 2
-    const qrY = headY + 12
+    const qrY = headY + 13
     doc.addImage(qr, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
 
     // legenda
