@@ -234,7 +234,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
     if (
       !u.setup_code &&
       !confirm(
-        `"${u.display_name || u.username}" já tem senha definida. Gerar um novo código apaga a senha atual — a pessoa só entra de novo usando o código. Continuar?`,
+        `"${u.full_name || u.display_name || u.username}" já tem senha definida. Gerar um novo código apaga a senha atual — a pessoa só entra de novo usando o código. Continuar?`,
       )
     )
       return
@@ -268,7 +268,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
 
   async function handleRename(u: CurrentUser) {
     const raw = window.prompt(
-      `Novo nome de usuário para "${u.display_name || u.username}" (sem espaço, sem acento):`,
+      `Novo nome de usuário para "${u.full_name || u.display_name || u.username}" (sem espaço, sem acento):`,
       u.username,
     )
     if (!raw) return
@@ -338,9 +338,9 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
           {users.map((u) => (
             <div key={u.id} className="rounded-2xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg-elevated)' }}>
               <div className="flex items-center gap-2.5">
-                <Avatar name={u.display_name || u.username} size={34} userId={u.id} />
+                <Avatar name={u.full_name || u.display_name || u.username} size={34} userId={u.id} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium">{u.display_name || u.username}</div>
+                  <div className="truncate text-[14px] font-medium">{u.full_name || u.display_name || u.username}</div>
                   <div className="truncate text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>
                     @{u.username}
                   </div>
@@ -407,7 +407,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                     className="min-h-10 text-xs"
                     style={{ color: '#d43b3b' }}
                     onClick={() => {
-                      if (confirm(`Excluir o usuário "${u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
+                      if (confirm(`Excluir o usuário "${u.full_name || u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
                         runAction(api.deleteUser(u.id))
                     }}
                   >
@@ -436,9 +436,9 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
               <tr key={u.id}>
                 <Td>
                   <div className="flex items-center gap-2.5">
-                    <Avatar name={u.display_name || u.username} size={30} userId={u.id} />
+                    <Avatar name={u.full_name || u.display_name || u.username} size={30} userId={u.id} />
                     <div className="min-w-0">
-                      <div className="font-medium">{u.display_name || u.username}</div>
+                      <div className="font-medium">{u.full_name || u.display_name || u.username}</div>
                       <div className="text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
                         @{u.username}
                       </div>
@@ -518,7 +518,7 @@ function UsersTab({ users, onChange }: { users: CurrentUser[]; onChange: () => v
                         className="min-h-10 md:min-h-0 text-xs"
                         style={{ color: '#d43b3b' }}
                         onClick={() => {
-                          if (confirm(`Excluir o usuário "${u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
+                          if (confirm(`Excluir o usuário "${u.full_name || u.display_name || u.username}"? Essa ação não pode ser desfeita.`))
                             runAction(api.deleteUser(u.id))
                         }}
                       >
@@ -723,7 +723,7 @@ function ModuleContributorsCell({ moduleId, users, onError }: { moduleId: string
         >
           <option value="">+ adicionar</option>
           {candidates.map((u) => (
-            <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+            <option key={u.id} value={u.id}>{u.full_name || u.display_name || u.username}</option>
           ))}
         </select>
       )}
@@ -1507,7 +1507,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
             {users
               .filter((u) => !members.some((m) => m.user_id === u.id))
               .map((u) => (
-                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+                <option key={u.id} value={u.id}>{u.full_name || u.display_name || u.username}</option>
               ))}
           </select>
 
@@ -1519,7 +1519,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
             onChange={(e) => api.updateGroup(selected.id, { internal_admin_id: Number(e.target.value) }).then(refreshSelected)}
           >
             {admins.map((u) => (
-              <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              <option key={u.id} value={u.id}>{u.full_name || u.display_name || u.username}</option>
             ))}
           </select>
 
@@ -1546,7 +1546,7 @@ function GroupsTab({ users }: { users: CurrentUser[] }) {
           >
             <option value="">Selecione…</option>
             {admins.map((u) => (
-              <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              <option key={u.id} value={u.id}>{u.full_name || u.display_name || u.username}</option>
             ))}
           </select>
           {admins.length === 0 && (
