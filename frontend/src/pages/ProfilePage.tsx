@@ -244,7 +244,7 @@ export function ProfilePage() {
         </button>
       </form>
 
-      <BadgeSection defaultTitle={user.qualification || user.position} />
+      <BadgeSection />
 
       <form
         onSubmit={handleChangePassword}

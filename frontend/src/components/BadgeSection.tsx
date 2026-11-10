@@ -5,9 +5,18 @@ import { downloadBadges } from '../lib/badge'
 const inputStyle = { border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }
 const inputCls = 'w-full rounded-lg px-3.5 py-2.5 text-sm outline-none'
 
+/** "Técnico(a)" -> ["Técnico", "Técnica"]; sem "(a)" no fim, nada. */
+function genderForms(title: string): string[] {
+  const m = /^(.*?)\(a\)(.*)$/.exec(title)
+  if (!m) return []
+  const [, base, rest] = m
+  const fem = /[oe]$/.test(base) ? base.slice(0, -1) + 'a' : base + 'a' // Técnica, Mestra, Professora
+  return [base + rest, fem + rest]
+}
+
 // "Meu crachá" no perfil (pedido do usuário, 2026-10-20): os dados do verso
 // (sensíveis — só a pessoa e o administrador máximo veem) e o PDF pronto.
-export function BadgeSection({ defaultTitle }: { defaultTitle: string }) {
+export function BadgeSection() {
   const [data, setData] = useState<BadgeData | null>(null)
   const [title, setTitle] = useState('')
   const [emName, setEmName] = useState('')
@@ -31,6 +40,8 @@ export function BadgeSection({ defaultTitle }: { defaultTitle: string }) {
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Não foi possível carregar os dados do crachá.'))
   }, [])
+
+  const autoTitle = data?.auto_title ?? ''
 
   async function save(): Promise<BadgeData | null> {
     setError(null)
@@ -87,10 +98,35 @@ export function BadgeSection({ defaultTitle }: { defaultTitle: string }) {
 
       <div className="mb-4">
         <label className="mb-1.5 block text-[13px] font-medium">Título no crachá</label>
-        <input className={inputCls} style={inputStyle} value={title} maxLength={40} onChange={(e) => setTitle(e.target.value)} placeholder={defaultTitle || 'ex.: Professora, Doutorando'} />
+        <input className={inputCls} style={inputStyle} value={title} maxLength={40} onChange={(e) => setTitle(e.target.value)} placeholder={autoTitle || 'ex.: Professora, Doutorando'} />
         <p className="mt-1 text-[11.5px]" style={{ color: 'var(--color-text-muted)' }}>
-          Em branco = {defaultTitle ? `"${defaultTitle}"` : 'sua qualificação'}. Útil para escrever no seu gênero (ex.: Professora).
+          {autoTitle
+            ? <>Automático pelo seu cargo: <strong>{autoTitle}</strong> (vale quando o campo fica em branco).</>
+            : 'Sem cargo definido ainda — o coordenador define na página de Usuários.'}
+          {genderForms(autoTitle).length > 0 && ' Para escrever no seu gênero:'}
         </p>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {genderForms(autoTitle).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTitle(t)}
+              aria-pressed={title === t}
+              className="rounded-full border px-3 py-1 text-[12px]"
+              style={{
+                borderColor: title === t ? 'var(--color-primary)' : 'var(--color-border)',
+                color: title === t ? 'var(--color-primary)' : 'var(--color-text)',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+          {title && (
+            <button type="button" onClick={() => setTitle('')} className="rounded-full px-3 py-1 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
+              usar o automático
+            </button>
+          )}
+        </div>
       </div>
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>

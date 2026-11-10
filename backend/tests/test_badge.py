@@ -23,6 +23,34 @@ def test_person_fills_own_badge_data(user_a_client, user_a):
     assert user_a_client.get("/auth/me/badge").json()["blood_type"] == ""
 
 
+def _set_cargo(db_engine, user, position, qualification=None):
+    from sqlmodel import Session
+
+    from app.db.models import User
+
+    with Session(db_engine) as s:
+        u = s.get(User, user.id)
+        u.position = position
+        if qualification is not None:
+            u.qualification = qualification
+        s.add(u)
+        s.commit()
+
+
+def test_auto_title_comes_from_cargo(user_a_client, user_a, db_engine):
+    _set_cargo(db_engine, user_a, "Técnico(a)", "Graduando(a)")
+    b = user_a_client.get("/auth/me/badge").json()
+    assert b["title"] == "Técnico(a)" and b["auto_title"] == "Técnico(a)"
+    # escrito pela pessoa (ex.: no gênero dela) tem prioridade
+    user_a_client.patch("/auth/me", json={"badge_title": "Técnica"})
+    b = user_a_client.get("/auth/me/badge").json()
+    assert b["title"] == "Técnica" and b["auto_title"] == "Técnico(a)"
+    # sem cargo, vale a qualificação
+    user_a_client.patch("/auth/me", json={"badge_title": ""})
+    _set_cargo(db_engine, user_a, "")
+    assert user_a_client.get("/auth/me/badge").json()["title"] == "Graduando(a)"
+
+
 def test_only_admin_maximo_sees_other_badges(super_admin_client, user_a_client, user_b_client, user_a, user_b, admin2_client):
     user_a_client.patch("/auth/me", json={"medical_notes": "Asma"})
     # outra pessoa, mesmo coordenador(a): não

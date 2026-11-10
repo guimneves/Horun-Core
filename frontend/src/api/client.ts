@@ -55,6 +55,7 @@ export interface Capabilities {
 
 /** Dados do crachá (frente e verso). SENSÍVEL: só a própria pessoa e o administrador máximo. */
 export interface BadgeData {
+  auto_title: string
   id: number
   name: string
   full_name: string

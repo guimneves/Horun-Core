@@ -213,7 +213,8 @@ class BadgeOut(BaseModel):
     id: int
     name: str  # nome curto (display_name), senão o completo
     full_name: str
-    title: str  # badge_title, senão qualificação, senão posição
+    title: str  # badge_title, senão o automático (auto_title)
+    auto_title: str  # título automático: o cargo (posição), senão a qualificação
     email: str
     phone: str
     has_photo: bool
@@ -224,11 +225,19 @@ class BadgeOut(BaseModel):
     badge_title: str
 
 
+def _auto_badge_title(user: User) -> str:
+    """Título automático do crachá = o cargo (pedido do usuário, 2026-11-10):
+    uma técnica que ainda está na graduação sai "Técnico(a)", não
+    "Graduando(a)". Sem cargo definido, vale a qualificação."""
+    return (user.position or user.qualification or "").strip()
+
+
 def _badge(user: User) -> BadgeOut:
     return BadgeOut(
         id=user.id, name=(user.display_name or user.full_name or user.username).strip(),
         full_name=user.full_name or "",
-        title=(user.badge_title or user.qualification or user.position or "").strip(),
+        title=(user.badge_title or "").strip() or _auto_badge_title(user),
+        auto_title=_auto_badge_title(user),
         email=user.email or "", phone=user.phone or "", has_photo=user.photo is not None,
         emergency_contact_name=user.emergency_contact_name or "",
         emergency_contact_phone=user.emergency_contact_phone or "",
