@@ -12,6 +12,12 @@ Ou sem prompts interativos:
     python create_horun_module.py --id leco --name "Leco" \
         --description "Modulo do LECO 832 Series" \
         --dest "../Projeto Horun/Leco Horun Dev"
+
+PostRun de um equipamento (Prompt_Horun_PostRun.md): `--template postrun`
+copia postrun-template/ e a parte comum dos PostRuns (postrun-core/) e, se o
+Agent-Horun estiver ao lado do Core, o servidor do Agente:
+    python create_horun_module.py --template postrun --id postrun-chnso \
+        --name "PostRun CHNSO" --dest "../Horun-PostRun-CHNSO"
 """
 
 from __future__ import annotations
@@ -23,11 +29,14 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-TEMPLATE_DIR = HERE / "module-template"
+TEMPLATES = {"padrao": HERE / "module-template", "postrun": HERE / "postrun-template"}
+TEMPLATE_DIR = TEMPLATES["padrao"]
+AGENT_REPO_CANDIDATES = [HERE.parent / "Horun Agent", HERE.parent / "Agent-Horun"]
 DESIGN_SYSTEM_DIR = HERE / "design-system"
 
 sys.path.insert(0, str(HERE / "scripts"))
 from vendor_design_system import vendor as vendor_design_system  # noqa: E402
+from vendor_postrun_core import vendor as vendor_postrun_core  # noqa: E402
 
 PLACEHOLDERS = ["__MODULE_ID__", "__MODULE_NAME__", "__MODULE_DESCRIPTION__"]
 
@@ -48,6 +57,10 @@ def slugify(value: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--template", choices=sorted(TEMPLATES), default="padrao",
+        help="padrao (módulo comum) ou postrun (PostRun de um equipamento)",
+    )
     parser.add_argument("--id", dest="module_id", help="Id do módulo (slug), ex.: leco")
     parser.add_argument("--name", dest="module_name", help="Nome público, ex.: Leco")
     parser.add_argument("--description", dest="description", help="Descrição curta")
@@ -93,9 +106,11 @@ def replace_placeholders(text: str, values: dict[str, str]) -> str:
     return text
 
 
-def copy_and_fill(target_dir: Path, values: dict[str, str]) -> None:
-    for src_path in TEMPLATE_DIR.rglob("*"):
-        rel = src_path.relative_to(TEMPLATE_DIR)
+def copy_and_fill(target_dir: Path, values: dict[str, str], template_dir: Path = TEMPLATE_DIR) -> None:
+    for src_path in template_dir.rglob("*"):
+        if "__pycache__" in src_path.parts or "node_modules" in src_path.parts or src_path.suffix in {".pyc", ".db"}:
+            continue
+        rel = src_path.relative_to(template_dir)
         dst_path = target_dir / rel
 
         if src_path.is_dir():
@@ -121,11 +136,24 @@ def main() -> None:
         sys.exit(f"Pasta de destino já existe e não está vazia: {target_dir}")
 
     target_dir.mkdir(parents=True, exist_ok=True)
-    copy_and_fill(target_dir, values)
+    copy_and_fill(target_dir, values, TEMPLATES[args.template])
     # design-system por CÓPIA dentro do módulo (frontend/vendor/), não por
     # caminho relativo até o Core — o build Docker do módulo só enxerga o
     # próprio repositório (ver scripts/vendor_design_system.py)
     vendor_design_system(target_dir / "frontend")
+    if args.template == "postrun":
+        vendor_postrun_core(target_dir)
+        agent_repo = next((p for p in AGENT_REPO_CANDIDATES if (p / "scripts" / "vendor_server.py").exists()), None)
+        if agent_repo is not None:
+            import subprocess
+
+            subprocess.run(
+                [sys.executable, str(agent_repo / "scripts" / "vendor_server.py"), str(target_dir / "backend")],
+                check=True,
+            )
+        else:
+            print("Aviso: Agent-Horun não encontrado ao lado do Core — rode depois "
+                  "Agent-Horun/scripts/vendor_server.py <módulo>/backend (necessário em produção).")
 
     print()
     print(f"Módulo '{values['module_name']}' (id: {values['module_id']}) criado em:")

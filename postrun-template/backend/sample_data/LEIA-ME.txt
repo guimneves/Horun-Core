@@ -1,0 +1,2 @@
+Dados SINTETICOS do equipamento de exemplo do modelo PostRun (gerados por script).
+Troque por arquivos do seu equipamento em desenvolvimento (POSTRUN_DATA_DIR). Nunca versione dados reais.

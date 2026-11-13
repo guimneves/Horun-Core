@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Data / local
+*.db
+*.sqlite
+*.sqlite3
+.env
+backend/logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dumps do serviço db-backup (em produção use BACKUP_DIR fora do repositório)
+backups/
+# a cópia do design-system (frontend/vendor/) É versionada — não ignore
