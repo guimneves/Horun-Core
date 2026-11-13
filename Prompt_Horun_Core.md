@@ -187,7 +187,7 @@ Cada projeto com banco (Core, RE7S — e todo módulo novo, ver `Prompt_Horun_Mo
 
 - Faz um `pg_dump -Fc` (formato custom, comprimido) **ao subir e a cada `BACKUP_INTERVAL_HOURS`** (padrão 24), confere que o arquivo abre (`pg_restore --list`) e só então o renomeia para `<prefixo>_AAAA-MM-DD_HHMM.dump` — um dump interrompido nunca parece válido.
 - Apaga os dumps do próprio prefixo com mais de `BACKUP_KEEP_DAYS` (padrão 30).
-- Grava em **`BACKUP_DIR`** (no `.env`), uma pasta do Windows **fora do volume do Docker e do repositório** — sobrevive a `docker compose down -v` e a um Docker corrompido. Sugestão: `C:/HorunBackups/core` e `C:/HorunBackups/re7s`, e copiar essa pasta para fora da máquina (OneDrive, HD externo, outro PC) — backup só na mesma máquina não protege contra perda do disco.
+- Grava em **`BACKUP_DIR`** (no `.env`), uma pasta do Windows **fora do volume do Docker e do repositório** — sobrevive a `docker compose down -v` e a um Docker corrompido. Sugestão: `C:/HorunBackups/Horun-core-backup` e `C:/HorunBackups/Horun-re7s-backup`, e copiar essa pasta para fora da máquina (OneDrive, HD externo, outro PC) — backup só na mesma máquina não protege contra perda do disco.
 - Conferir que está rodando: `docker compose logs db-backup` (uma linha `ok: <arquivo> (<tamanho>)` por dump) e a pasta `BACKUP_DIR`.
 - Forçar um dump agora: `docker compose run --rm -e BACKUP_ONCE=1 db-backup`.
 
