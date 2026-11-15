@@ -86,6 +86,78 @@ do Horun. Os módulos (RE7S, GeoHorun, Financeiro…) funcionam igual.
 
 Teste rápido no notebook (Prompt de Comando): `tailscale ping horun-servidor`.
 
+## Terminal do servidor de casa (SSH, sem AnyDesk)
+
+O Windows já traz um servidor SSH (OpenSSH). Com ele, pelo Tailscale, você abre
+o PowerShell do servidor de qualquer lugar: `ssh horun-servidor`. (O "Tailscale
+SSH" não serve: não funciona em servidor Windows.)
+
+### No servidor — PowerShell **como administrador**
+
+1. Instalar e ligar o serviço (e deixar ligando sozinho):
+
+   ```powershell
+   Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+   Start-Service sshd
+   Set-Service -Name sshd -StartupType Automatic
+   ```
+
+2. Aceitar conexão **só pela VPN** (endereços do Tailscale), não da rede do laboratório:
+
+   ```powershell
+   Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -RemoteAddress 100.64.0.0/10
+   ```
+
+3. Abrir no PowerShell em vez do cmd:
+
+   ```powershell
+   New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -PropertyType String -Force
+   ```
+
+### Entrar com chave em vez de senha
+
+1. No **notebook** (PowerShell comum): `ssh-keygen -t ed25519` (Enter em tudo; se
+   quiser, uma senha para a chave). A chave pública fica em
+   `C:\Users\<você>\.ssh\id_ed25519.pub`.
+2. No **servidor** (PowerShell como administrador), cole o conteúdo desse
+   `.pub` no arquivo das chaves de administradores e acerte as permissões (o
+   Windows recusa a chave se outros usuários puderem ler o arquivo):
+
+   ```powershell
+   notepad C:\ProgramData\ssh\administrators_authorized_keys
+   icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant "Administradores:F" /grant "SYSTEM:F"
+   ```
+
+   (Windows em inglês: `"Administrators:F"`.) Se a conta do servidor **não** for
+   administradora, a chave vai em `C:\Users\<conta>\.ssh\authorized_keys`.
+3. Teste do notebook: `ssh <conta-do-windows>@horun-servidor` — deve entrar sem
+   pedir a senha do Windows.
+4. Funcionando com a chave, **desligue o login por senha**: no servidor, abra
+   `C:\ProgramData\ssh\sshd_config` (Bloco de Notas como administrador), troque
+   `#PasswordAuthentication yes` por `PasswordAuthentication no` e reinicie:
+   `Restart-Service sshd`.
+
+### Liberar a porta 22 só para você no Tailscale
+
+Em **Access controls**, acrescente uma linha em `"acls"` (só o administrador da
+rede — você — chega ao terminal):
+
+```json
+{"action": "accept", "src": ["autogroup:admin"], "dst": ["tag:horun:22"]}
+```
+
+### Usar
+
+- **Notebook**: `ssh <conta>@horun-servidor` → `cd C:\Horun\PostRun-GeoHorun` →
+  `git pull`, `docker compose up -d --build`, `docker compose logs -f`…
+  Dica: o **VS Code** com a extensão *Remote - SSH* abre as pastas do servidor
+  como se fossem locais.
+- **Tablet**: app **Termius** (iOS/Android) → novo host `horun-servidor`, usuário
+  da conta do Windows, e a chave (gere no próprio Termius e cole a pública no
+  `administrators_authorized_keys`, como no passo 2).
+- O Docker responde pelo SSH enquanto o Docker Desktop estiver aberto no
+  servidor (ele sobe com o login do Windows).
+
 ## Dar acesso a outra pessoa
 
 Painel → **Users** → **Invite users** (o plano gratuito tem até 3 usuários). Ela
