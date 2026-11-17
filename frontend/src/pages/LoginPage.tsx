@@ -15,6 +15,20 @@ function safeNext(raw: string | null): string {
   return raw
 }
 
+/** Página de um módulo (/m/<id>/...): não é rota desta interface — o servidor
+ * entrega a do módulo, então a volta depois do login recarrega a página
+ * (16/11/2026: abrir um módulo sem sessão leva ao login e volta para ele). */
+function isModulePath(path: string): boolean {
+  return path.startsWith('/m/')
+}
+
+function ModuleRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to)
+  }, [to])
+  return <p className="p-6 text-sm">Abrindo o módulo…</p>
+}
+
 export function LoginPage() {
   const { user, login, setPassword: submitSetPassword, refreshUser } = useAuth()
   const [signup, setSignup] = useState<SignupInfo | null>(null)
@@ -28,6 +42,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNext(params.get('next'))
+  const goNext = () => (isModulePath(next) ? window.location.replace(next) : navigate(next, { replace: true }))
   const [mode, setMode] = useState<Mode>('login')
 
   const [username, setUsername] = useState('')
@@ -54,7 +69,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login(username, password)
-      navigate(next, { replace: true })
+      goNext()
     } catch (err) {
       if (err instanceof ApiError && err.status === 428) {
         // Conta sem senha ainda — leva direto pro fluxo de primeiro acesso,
@@ -79,7 +94,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await submitSetPassword(username, setupCode, newPassword)
-      navigate(next, { replace: true })
+      goNext()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Falha ao definir a senha')
     } finally {
@@ -87,7 +102,7 @@ export function LoginPage() {
     }
   }
 
-  if (user) return <Navigate to={next} replace />
+  if (user) return isModulePath(next) ? <ModuleRedirect to={next} /> : <Navigate to={next} replace />
 
   return (
     <div className="flex min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -128,7 +143,7 @@ export function LoginPage() {
               onBack={() => switchMode('login')}
               onDone={async () => {
                 await refreshUser()
-                navigate(next, { replace: true })
+                goNext()
               }}
             />
           ) : mode === 'login' ? (

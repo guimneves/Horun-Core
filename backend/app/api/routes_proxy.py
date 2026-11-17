@@ -16,12 +16,14 @@ inclusive pro HTML/JS da SPA, que só deve chegar a quem tem acesso.
 
 from __future__ import annotations
 
+from urllib.parse import quote
+
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlmodel import select
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import SessionDep, get_current_user
 from app.core.permissions import LEVEL_SLUGS, is_coordinator_or_above, user_level
 from app.core.security import SESSION_COOKIE_NAME
 from app.db.models import Module, UserModuleAccess
@@ -115,7 +117,20 @@ def redirect_to_trailing_slash(module_id: str):
     "/m/{module_id}/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
 )
-async def proxy(module_id: str, path: str, request: Request, user: CurrentUser, session: SessionDep):
+async def proxy(module_id: str, path: str, request: Request, session: SessionDep):
+    is_api_call = path == "api" or path.startswith("api/")
+    try:
+        user = get_current_user(request, session)
+    except HTTPException as exc:
+        # Sem sessão abrindo a PÁGINA de um módulo (link salvo, QR code,
+        # endereço digitado): vai para o login do Core e volta para cá depois
+        # (pedido do usuário, 16/11/2026 — antes aparecia {"detail": "Não
+        # autenticado"}). Chamadas à API do módulo continuam com 401.
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED and not is_api_call and request.method == "GET":
+            target = f"/m/{module_id}/{path}" + (f"?{request.url.query}" if request.url.query else "")
+            return RedirectResponse(url=f"/login?next={quote(target, safe='')}", status_code=status.HTTP_303_SEE_OTHER)
+        raise
+
     module = session.get(Module, module_id)
     if module is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Módulo não encontrado")
@@ -123,7 +138,6 @@ async def proxy(module_id: str, path: str, request: Request, user: CurrentUser, 
     if not has_module_access(session, user.id, is_coordinator_or_above(user), module_id, module.public):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem permissão para este módulo")
 
-    is_api_call = path == "api" or path.startswith("api/")
     if is_api_call:
         upstream_base = module.internal_base_url
     else:

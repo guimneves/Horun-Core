@@ -120,6 +120,18 @@ def test_proxy_frontend_root_request(super_admin_client, monkeypatch):
     assert _FakeAsyncClient.calls[0]["url"] == "http://re7s-frontend:80/"
 
 
+def test_module_page_without_session_goes_to_login_and_back(client):
+    """Sem sessão, a página de um módulo leva ao login com ?next= (e o login
+    volta para ela); a API do módulo continua respondendo 401."""
+    r = client.get("/m/re7s/fila?x=1", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/login?next=%2Fm%2Fre7s%2Ffila%3Fx%3D1"
+    r = client.get("/m/re7s/", follow_redirects=False)
+    assert r.headers["location"] == "/login?next=%2Fm%2Fre7s%2F"
+    assert client.get("/m/re7s/api/whoami").status_code == 401
+    assert client.post("/m/re7s/fila").status_code == 401
+
+
 def test_proxy_without_trailing_slash_redirects(super_admin_client):
     _register_module(super_admin_client, frontend_url="http://re7s-frontend:80")
     r = super_admin_client.get("/m/re7s", follow_redirects=False)
