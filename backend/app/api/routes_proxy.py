@@ -113,6 +113,8 @@ def redirect_to_trailing_slash(module_id: str):
     return RedirectResponse(url=f"/m/{module_id}/")
 
 
+PROXY_TIMEOUT_SECONDS = 30.0  # pedidos longos de módulo vão em partes (ver GeoHorun)
+
 @router.api_route(
     "/m/{module_id}/{path:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -154,7 +156,7 @@ async def proxy(module_id: str, path: str, request: Request, session: SessionDep
 
     body = await request.body()
 
-    async with httpx.AsyncClient(timeout=30.0) as http_client:
+    async with httpx.AsyncClient(timeout=PROXY_TIMEOUT_SECONDS) as http_client:
         try:
             upstream = await http_client.request(
                 request.method,
@@ -163,9 +165,17 @@ async def proxy(module_id: str, path: str, request: Request, session: SessionDep
                 headers=forward_headers,
                 content=body,
             )
+        except httpx.TimeoutException as exc:
+            # o módulo está no ar, mas não respondeu em 30 s — antes saía
+            # "Módulo 'x' inacessível: " com o motivo vazio (2026-11-19)
+            raise HTTPException(
+                status.HTTP_504_GATEWAY_TIMEOUT,
+                f"O módulo '{module_id}' demorou mais de {PROXY_TIMEOUT_SECONDS:.0f} s para responder.",
+            ) from exc
         except httpx.HTTPError as exc:
             raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY, f"Módulo '{module_id}' inacessível: {exc}"
+                status.HTTP_502_BAD_GATEWAY,
+                f"Módulo '{module_id}' inacessível: {str(exc) or type(exc).__name__}",
             ) from exc
 
     response_headers = {

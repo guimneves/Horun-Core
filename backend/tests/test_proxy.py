@@ -92,6 +92,21 @@ def test_proxy_returns_502_when_module_unreachable(super_admin_client):
     assert r.status_code == 502
 
 
+def test_proxy_says_the_module_was_slow_on_timeout(super_admin_client, monkeypatch):
+    # 2026-11-19: um módulo lento aparecia como "Módulo 'x' inacessível: "
+    # (motivo vazio); agora diz que demorou, com 504
+    _register_module(super_admin_client)
+
+    class _SlowClient(_FakeAsyncClient):
+        async def request(self, *args, **kwargs):
+            raise routes_proxy.httpx.ReadTimeout("")
+
+    monkeypatch.setattr(routes_proxy.httpx, "AsyncClient", _SlowClient)
+    r = super_admin_client.get("/m/re7s/api/whoami")
+    assert r.status_code == 504
+    assert "demorou mais de 30 s" in r.json()["detail"]
+
+
 def test_proxy_frontend_path_404_when_module_not_embeddable(super_admin_client):
     _register_module(super_admin_client)  # sem internal_frontend_url
     r = super_admin_client.get("/m/re7s/")
